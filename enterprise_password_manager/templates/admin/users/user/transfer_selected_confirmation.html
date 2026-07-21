@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    {{ media }}
+    <script src="{% static 'admin/js/cancel.js' %}" async></script>
+    <style>
+        .transfer-warning { background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; padding: 15px; margin-bottom: 15px; }
+        .transfer-warning p { margin: 0; font-weight: bold; color: #856404; }
+        .transfer-info { background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 15px; margin-bottom: 15px; }
+        .transfer-info p { margin: 0; color: #0c5460; font-size: 14px; }
+        .transfer-form-box { background: #f8f9fa; border: 2px solid #dee2e6; border-radius: 6px; padding: 20px; margin: 15px 0; }
+        .transfer-form-box label { font-weight: bold; font-size: 15px; display: block; margin-bottom: 8px; }
+        .submit-row { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #dee2e6; }
+        .btn-transfer { background: #dc3545; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .btn-transfer:hover { background: #c82333; }
+        .btn-cancel { padding: 10px 20px; text-decoration: none; font-size: 14px; }
+        .errorlist { color: #dc3545; margin: 5px 0; padding-left: 20px; }
+    </style>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} delete-confirmation{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {% translate 'Delete multiple users' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module padded">
+    <h2>{% translate 'Transferir bóvedas antes de eliminar usuarios seleccionados' %}</h2>
+
+    <div class="transfer-warning">
+        <p>{% blocktranslate count counter=queryset|length %}Va a eliminar {{ counter }} usuario.{% plural %}Va a eliminar {{ counter }} usuarios.{% endblocktranslate %}</p>
+        <p style="font-weight: normal; margin-top: 8px; color: #6c757d;">{% translate 'Debe transferir las bóvedas a un usuario destino antes de eliminar.' %}</p>
+    </div>
+
+    <div class="transfer-info">
+        <p><strong>{{ total_entries }}</strong> {% blocktranslate count counter=total_entries %}contraseña será transferida{% plural %}contraseñas serán transferidas{% endblocktranslate %} al usuario destino.</p>
+    </div>
+
+    <form method="post" id="vault-transfer-form">{% csrf_token %}
+        {% for obj in queryset %}
+            <input type="hidden" name="_selected_action" value="{{ obj.pk }}">
+        {% endfor %}
+        <input type="hidden" name="action" value="transfer_and_delete_selected">
+
+        <div class="transfer-form-box">
+            <label for="{{ form.target_user.id_for_label }}">{{ form.target_user.label }}:</label>
+            {{ form.target_user }}
+            <div class="help" style="margin-top: 5px; color: #6c757d; font-size: 13px;">
+                {{ form.target_user.help_text }}
+            </div>
+            {% if form.target_user.errors %}
+                <ul class="errorlist">
+                    {% for error in form.target_user.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="{% translate 'Transferir bóvedas y eliminar usuarios' %}" class="btn-transfer">
+            <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link btn-cancel">{% translate "Cancelar" %}</a>
+        </div>
+    </form>
+</div>
+{% endblock content %}

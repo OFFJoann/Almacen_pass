@@ -1,0 +1,33 @@
+from django.urls import path
+from . import views
+
+app_name = 'passwords'
+
+urlpatterns = [
+    path('', views.vault_view, name='vault'),
+    path('dashboard/', views.user_dashboard, name='dashboard'),
+    path('entry/create/', views.entry_create, name='entry_create'),
+    path('entry/<uuid:pk>/', views.entry_detail, name='detail'),
+    path('entry/<uuid:pk>/edit/', views.entry_edit, name='entry_edit'),
+    path('entry/<uuid:pk>/delete/', views.entry_delete, name='entry_delete'),
+    path('entry/<uuid:pk>/restore/', views.entry_restore, name='entry_restore'),
+    path('entry/<uuid:pk>/permanent-delete/', views.entry_permanent_delete, name='entry_permanent_delete'),
+    path('entry/<uuid:pk>/favorite/', views.toggle_favorite, name='toggle_favorite'),
+    path('entry/<uuid:pk>/share/', views.entry_share, name='entry_share'),
+    path('share/<uuid:share_id>/revoke/', views.revoke_share, name='revoke_share'),
+    path('generate/', views.password_generator, name='password_generator'),
+    path('import/', views.import_passwords, name='import'),
+    path('export/', views.export_passwords, name='export'),
+    path('trash/', views.trash_view, name='trash'),
+    path('trash/empty/', views.empty_trash, name='empty_trash'),
+    path('folders/create/', views.folder_create, name='folder_create'),
+    path('folders/<uuid:pk>/delete/', views.folder_delete, name='folder_delete'),
+    path('categories/create/', views.category_create, name='category_create'),
+    path('categories/<uuid:pk>/delete/', views.category_delete, name='category_delete'),
+    path('tags/create/', views.tag_create, name='tag_create'),
+    path('entry/<uuid:pk>/totp/generate/', views.totp_generate, name='totp_generate'),
+    path('entry/<uuid:pk>/totp/remove/', views.totp_remove, name='totp_remove'),
+    path('entry/<uuid:pk>/totp/qr/', views.totp_qr, name='totp_qr'),
+    path('entry/<uuid:pk>/totp/current/', views.totp_current, name='totp_current'),
+    path('entry/<uuid:pk>/history/<uuid:hist_pk>/restore/', views.password_history_restore, name='password_history_restore'),
+]

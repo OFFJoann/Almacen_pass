@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Mi Actividad{% endblock %}
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-activity"></i> Mi Actividad</h4>
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Historial de Accesos</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead><tr><th>Fecha</th><th>IP</th><th>Navegador</th><th>SO</th><th>Éxito</th></tr></thead>
+                        <tbody>
+                            {% for h in login_history %}
+                                <tr>
+                                    <td><small>{{ h.login_at|date:"Y-m-d H:i" }}</small></td>
+                                    <td><small>{{ h.ip_address }}</small></td>
+                                    <td><small>{{ h.browser }}</small></td>
+                                    <td><small>{{ h.os }}</small></td>
+                                    <td>{% if h.success %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-center text-muted">Sin actividad</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Pista de Auditoría</h6></div>
+            <div class="card-body" style="max-height:400px;overflow-y:auto;">
+                <ul class="list-group list-group-flush">
+                    {% for log in audit_logs %}
+                        <li class="list-group-item py-1">
+                            <small><span class="badge bg-secondary">{{ log.get_action_display }}</span> {{ log.details }} <span class="text-muted">{{ log.created_at|timesince }} atrás</span></small>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item text-muted">Sin actividad</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

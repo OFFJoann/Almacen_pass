@@ -1,0 +1,45 @@
+<nav class="navbar navbar-expand-lg border-bottom mb-4" style="background-color: var(--bs-body-bg);">
+    <div class="container-fluid">
+        <button class="btn btn-outline-secondary btn-sm d-none d-lg-block" onclick="toggleSidebar()">
+            <i class="bi bi-list"></i>
+        </button>
+        <button class="btn btn-outline-secondary btn-sm d-lg-none" onclick="toggleSidebar()">
+            <i class="bi bi-list"></i>
+        </button>
+        <div class="ms-auto d-flex align-items-center gap-3">
+            <a href="{% url 'passwords:password_generator' %}" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#passwordGeneratorModal">
+                <i class="bi bi-dice-6"></i> Generar
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary position-relative border-0" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-bell-fill"></i>
+                    {% if unread_notifications > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {{ unread_notifications }}
+                        </span>
+                    {% endif %}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg" style="min-width: 300px;">
+                    <li><h6 class="dropdown-header">Notificaciones</h6></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="text-center py-2">
+                        <a href="{% url 'notifications:list' %}" class="btn btn-sm btn-link">Ver Todas</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <small class="d-none d-md-inline">{{ user.full_name }}</small>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{% url 'authentication:setup_mfa' %}"><i class="bi bi-shield-check"></i> Configuración MFA</a></li>
+                    <li><a class="dropdown-item" href="{% url 'audit:my_activity' %}"><i class="bi bi-activity"></i> Mi Actividad</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="{% url 'authentication:logout' %}"><i class="bi bi-box-arrow-right"></i> Cerrar Sesión</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>
+
+{% include 'passwords/includes/password_generator_modal.html' %}

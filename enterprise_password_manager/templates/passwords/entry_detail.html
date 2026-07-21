@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ entry.name }} - Administrador de Contraseñas{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <h4 class="mb-1">{{ entry.name }}
+                            {% if entry.is_compromised %}<span class="badge bg-danger ms-2" title="Expuesta en filtraciones de datos">DarkWeb</span>{% endif %}
+                        </h4>
+                        <small class="text-muted">
+                            {% if entry.folder %}<i class="bi bi-folder"></i> {{ entry.folder.name }} · {% endif %}
+                            {% if entry.category %}<i class="bi bi-tag"></i> {{ entry.category.name }} · {% endif %}
+                            <span class="badge bg-{% if entry.sensitivity == 'low' %}success{% elif entry.sensitivity == 'medium' %}warning{% elif entry.sensitivity == 'high' %}danger{% else %}dark{% endif %}">
+                                {{ entry.get_sensitivity_display }}
+                            </span>
+                        </small>
+                    </div>
+                    <div class="btn-group">
+                        {% if not user_share or user_share.permission != 'read' %}
+                            <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                        {% endif %}
+                        {% if not user_share or user_share.permission == 'reshare' %}
+                            <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info btn-sm"><i class="bi bi-share"></i> Compartir</a>
+                        {% endif %}
+                        {% if not user_share %}
+                            <button class="btn btn-outline-danger btn-sm" onclick="if(confirm('¿Mover a la papelera?')) location.href='{% url 'passwords:entry_delete' entry.pk %}'">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small">URL</label>
+                    {% if entry.url %}
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="{{ entry.url }}" target="_blank" class="text-break">{{ entry.url }}</a>
+                            <button class="btn btn-sm btn-outline-secondary" data-clipboard="{{ entry.url }}"><i class="bi bi-clipboard"></i></button>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">-</p>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small">Usuario</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="font-monospace">{{ username }}</span>
+                        <button class="btn btn-sm btn-outline-secondary" data-clipboard="{{ username }}"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small">Contraseña</label>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="font-monospace" id="passwordField">
+                            {% if request.session.mfa_verified or not user.mfa_enabled %}
+                                ********
+                            {% else %}
+                                ********
+                            {% endif %}
+                        </span>
+                        <button class="btn btn-sm btn-outline-secondary" id="showPasswordBtn" onclick="togglePasswordVisibility()">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" id="copyPasswordBtn" data-clipboard="{{ password }}">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height: 8px;">
+                            <div class="progress-bar bg-{{ password_strength.color }}" role="progressbar"
+                                 style="width: {{ strength_pct }}%"></div>
+                        </div>
+                        <small class="text-{{ password_strength.color }} fw-semibold" style="min-width: 80px;">
+                            {{ password_strength.label }} ({{ password_strength.entropy }} bits)
+                        </small>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small">Notas</label>
+                    <p class="mb-0 text-break">{{ notes|linebreaks|default:'-' }}</p>
+                </div>
+
+                {% if entry.tags.all %}
+                    <div class="mb-3">
+                        {% for tag in entry.tags.all %}
+                            <span class="badge" style="background-color: {{ tag.color }}">{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="row text-muted small">
+                    <div class="col-md-3">Creado: {{ entry.created_at|date:'Y-m-d H:i' }}</div>
+                    <div class="col-md-3">Actualizado: {{ entry.updated_at|date:'Y-m-d H:i' }}</div>
+                    <div class="col-md-3">Versión: {{ entry.version }}</div>
+                    <div class="col-md-3">
+                        Accedido: {{ entry.last_accessed|timesince|default:'Nunca' }}
+                        ({{ entry.access_count }}x)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        {% include 'passwords/includes/totp_section.html' %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-share"></i> Compartido con</h6></div>
+            <div class="card-body">
+                {% if shares %}
+                    {% for share in shares %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                {% if share.shared_with_user %}
+                                    <small>{{ share.shared_with_user.email }}</small>
+                                {% elif share.shared_with_group %}
+                                    <small>{{ share.shared_with_group.name }} (Grupo)</small>
+                                {% endif %}
+                                <br><small class="text-muted">{{ share.get_permission_display }}</small>
+                            </div>
+                            {% if not share.is_revoked %}
+                                <form method="post" action="{% url 'passwords:revoke_share' share.pk %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Revocar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted small mb-0">No compartido</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if password_history %}
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Historial de Contraseñas</h6></div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for hist in password_history %}
+                    <div class="list-group-item py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <small class="text-muted d-block">{{ hist.created_at|date:'Y-m-d H:i' }}</small>
+                                <small class="text-muted">por {{ hist.changed_by.email|default:'Desconocido' }}</small>
+                                <span class="badge bg-info mt-1">{{ hist.changes_summary|default:'Actualización' }}</span>
+                            </div>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary" title="Copiar" data-clipboard="{{ hist.get_password }}"><i class="bi bi-clipboard"></i></button>
+                                <form method="post" action="{% url 'passwords:password_history_restore' entry.pk hist.pk %}" class="d-inline" onsubmit="return confirm('¿Restaurar esta versión? La contraseña actual se guardará en el historial.')">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-primary" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/jsqr/jsQR.js' %}"></script>
+<script>
+    function togglePasswordVisibility() {
+        var field = document.getElementById('passwordField');
+        if (field.textContent === '********') {
+            field.textContent = '{{ password }}';
+        } else {
+            field.textContent = '********';
+        }
+    }
+    function copyTotp() {
+        var code = document.getElementById('totpCode').textContent.trim();
+        navigator.clipboard.writeText(code).then(function() {
+            showToast('Código copiado', 'success');
+        });
+    }
+    function refreshTotp() {
+        var codeEl = document.getElementById('totpCode');
+        fetch('{% url "passwords:totp_current" entry.pk %}')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.code) codeEl.textContent = data.code;
+            });
+    }
+    {% if entry.has_totp %}
+    setInterval(refreshTotp, 30000);
+    {% else %}
+    document.addEventListener('change', function(e) {
+        if (e.target.id !== 'qrImageInput') return;
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            var img = new Image();
+            img.onload = function() {
+                var canvas = document.getElementById('qrCanvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                var code = jsQR(imageData.data, imageData.width, imageData.height);
+                var errorDiv = document.getElementById('qrError');
+                var secretDiv = document.getElementById('qrSecret');
+                var preview = document.getElementById('qrPreview');
+                var decodedInfo = document.getElementById('qrDecodedInfo');
+                if (code) {
+                    errorDiv.classList.add('d-none');
+                    var uri = code.data;
+                    var secret = '';
+                    if (uri.startsWith('otpauth://')) {
+                        var params = new URLSearchParams(uri.split('?')[1]);
+                        secret = params.get('secret') || '';
+                    } else {
+                        secret = uri.trim();
+                    }
+                    if (secret) {
+                        decodedInfo.innerHTML = '<i class="bi bi-check-circle"></i> QR decodificado correctamente';
+                        secretDiv.classList.remove('d-none');
+                        secretDiv.dataset.secret = secret;
+                        preview.innerHTML = '<img src="' + ev.target.result + '" class="img-fluid" style="max-width:200px">';
+                    } else {
+                        errorDiv.textContent = 'No se encontró un secreto 2FA válido en este QR';
+                        errorDiv.classList.remove('d-none');
+                    }
+                } else {
+                    errorDiv.textContent = 'No se pudo leer el QR. Intenta con una imagen más clara o usa la opción manual.';
+                    errorDiv.classList.remove('d-none');
+                    secretDiv.classList.add('d-none');
+                    preview.innerHTML = '<img src="' + ev.target.result + '" class="img-fluid" style="max-width:200px;opacity:0.5">';
+                }
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+    document.addEventListener('click', function(e) {
+        if (e.target.id !== 'saveQrTotpBtn') return;
+        var secret = document.getElementById('qrSecret').dataset.secret;
+        if (!secret) return;
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{% url "passwords:totp_generate" entry.pk %}';
+        var csrf = document.createElement('input');
+        csrf.type = 'hidden';
+        csrf.name = 'csrfmiddlewaretoken';
+        csrf.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        form.appendChild(csrf);
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'secret';
+        input.value = secret;
+        form.appendChild(input);
+        form.style.display = 'none';
+        document.body.appendChild(form);
+        var h3 = document.getElementById('addTotpModal');
+        var modal = bootstrap.Modal.getInstance(h3);
+        if (modal) modal.hide();
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).then(function(r) { return r.text(); }).then(function(html) {
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(html, 'text/html');
+            var newSection = doc.getElementById('totpSection');
+            if (newSection) {
+                document.getElementById('totpSection').outerHTML = newSection.outerHTML;
+                showToast('2FA configurado correctamente', 'success');
+                setInterval(refreshTotp, 30000);
+            }
+        });
+        form.remove();
+    });
+    {% endif %}
+</script>
+{% endblock %}
