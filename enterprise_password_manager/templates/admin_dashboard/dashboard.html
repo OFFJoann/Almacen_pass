@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Panel Admin - Administrador de Contraseñas{% endblock %}
+
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-speedometer2"></i> Panel de Administración</h4>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Total Usuarios</h6>
+                        <h2 class="mb-0">{{ total_users }}</h2>
+                    </div>
+                    <div class="text-primary"><i class="bi bi-people-fill fs-1"></i></div>
+                </div>
+                <small class="text-muted">{{ active_users }} activos · {{ blocked_users }} bloqueados</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Contraseñas</h6>
+                        <h2 class="mb-0">{{ total_passwords }}</h2>
+                    </div>
+                    <div class="text-success"><i class="bi bi-key-fill fs-1"></i></div>
+                </div>
+                <small class="text-muted">{{ weak_passwords_count }} débiles</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Puntaje Seguridad</h6>
+                        <h2 class="mb-0">{{ security_score }}%</h2>
+                    </div>
+                    <div class="text-info"><i class="bi bi-shield-check fs-1"></i></div>
+                </div>
+                <small class="text-muted">{{ users_with_mfa }} usuarios con MFA</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Sesiones Activas</h6>
+                        <h2 class="mb-0">{{ active_sessions }}</h2>
+                    </div>
+                    <div class="text-warning"><i class="bi bi-laptop fs-1"></i></div>
+                </div>
+                <small class="text-muted">{{ logins_today }} accesos hoy</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Contraseñas por Sensibilidad</h6></div>
+            <div class="card-body">
+                <canvas id="sensitivityChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-people"></i> Mejores Usuarios</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Contraseñas</th>
+                                <th>MFA</th>
+                                <th>Puntaje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in top_users %}
+                                <tr>
+                                    <td><small>{{ u.email }}</small></td>
+                                    <td>{{ u.password_count }}</td>
+                                    <td>{% if u.mfa_enabled %}<i class="bi bi-shield-check text-success"></i>{% else %}<i class="bi bi-shield text-muted"></i>{% endif %}</td>
+                                    <td>{{ u.security_score }}%</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-boxes"></i> Almacenamiento</h6></div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Bóvedas</span><span class="badge bg-primary">{{ storage_stats.total_vaults }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Grupos</span><span class="badge bg-primary">{{ storage_stats.total_groups }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Total Comparticiones</span><span class="badge bg-info">{{ storage_stats.total_shares }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Contraseñas Expiradas</span><span class="badge bg-warning">{{ expired_passwords }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Actividad Reciente</h6></div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% if recent_audit_logs %}
+                    <ul class="list-group list-group-flush">
+                        {% for log in recent_audit_logs %}
+                            <li class="list-group-item py-1">
+                                <small>
+                                    <span class="badge bg-{% if log.result == 'success' %}success{% elif log.result == 'failure' %}danger{% else %}secondary{% endif %} me-1">{{ log.get_action_display }}</span>
+                                    {% if log.user %}{{ log.user.email }}{% else %}Sistema{% endif %}
+                                    <span class="text-muted">{{ log.created_at|timesince }} atrás</span>
+                                </small>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0">Sin actividad reciente</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var ctx = document.getElementById('sensitivityChart').getContext('2d');
+        var data = {{ passwords_by_sensitivity|safe }};
+        var labels = data.map(function(d) { return d.sensitivity; });
+        var counts = data.map(function(d) { return d.count; });
+        var colors = {low: '#198754', medium: '#ffc107', high: '#dc3545', critical: '#212529'};
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: counts,
+                    backgroundColor: labels.map(function(l) { return colors[l] || '#6c757d'; }),
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

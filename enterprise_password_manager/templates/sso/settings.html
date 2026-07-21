@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Configuración SSO{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="mb-0"><i class="bi bi-shield-check"></i> Configuración SSO</h4>
+            <a href="{% url 'sso:configure' %}" class="btn btn-primary btn-sm">Configurar</a>
+        </div>
+        {% if config %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6"><strong>Proveedor:</strong> {{ config.get_provider_display }}</div>
+                        <div class="col-md-6"><strong>ID de Tenant:</strong> {{ config.tenant_id }}</div>
+                        <div class="col-md-6"><strong>ID de Cliente:</strong> {{ config.client_id }}</div>
+                        <div class="col-md-6"><strong>Estado:</strong> {% if config.is_active %}<span class="badge bg-success">Activado</span>{% else %}<span class="badge bg-secondary">Desactivado</span>{% endif %}</div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-info" onclick="testConnection()">Probar Conexión</button>
+                        <form method="post" action="{% url 'sso:toggle' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-{% if config.is_active %}danger{% else %}success{% endif %}">{% if config.is_active %}Desactivar{% else %}Activar{% endif %} SSO</button></form>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="card shadow-sm mb-4"><div class="card-body text-center py-5"><i class="bi bi-shield display-1 text-muted"></i><h5 class="mt-3">Sin configuración SSO</h5><a href="{% url 'sso:configure' %}" class="btn btn-primary">Configurar Ahora</a></div></div>
+        {% endif %}
+        {% if logs %}<div class="card shadow-sm"><div class="card-header"><h6 class="mb-0">Registros SSO</h6></div><div class="card-body" style="max-height:300px;overflow-y:auto;"><div class="list-group list-group-flush">{% for log in logs %}<div class="list-group-item py-1"><small>{{ log.created_at|date:"Y-m-d H:i" }} - {{ log.action }} - {{ log.user_email }} - {% if log.success %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</small></div>{% endfor %}</div></div></div>{% endif %}
+    </div>
+</div>
+<script>
+function testConnection() {
+    fetch("{% url 'sso:test_connection' %}").then(r=>r.json()).then(d=>{alert(d.message||d.error)});
+}
+</script>
+{% endblock %}

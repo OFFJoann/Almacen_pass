@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Actividad del Usuario{% endblock %}
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-person-lines-fill"></i> Actividad del Usuario</h4>
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Historial de Accesos</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead><tr><th>Fecha</th><th>IP</th><th>Navegador</th><th>Éxito</th></tr></thead>
+                        <tbody>
+                            {% for h in login_history %}
+                                <tr>
+                                    <td><small>{{ h.login_at|date:"Y-m-d H:i" }}</small></td>
+                                    <td><small>{{ h.ip_address }}</small></td>
+                                    <td><small>{{ h.browser }}</small></td>
+                                    <td>{% if h.success %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="text-muted">Sin actividad</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Sesiones Activas</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead><tr><th>IP</th><th>Navegador</th><th>Dispositivo</th><th>Última Actividad</th></tr></thead>
+                        <tbody>
+                            {% for s in active_sessions %}
+                                <tr>
+                                    <td><small>{{ s.ip_address }}</small></td>
+                                    <td><small>{{ s.browser }}</small></td>
+                                    <td><small>{{ s.device }}</small></td>
+                                    <td><small>{{ s.last_activity|timesince }} atrás</small></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="text-muted">Sin sesiones activas</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

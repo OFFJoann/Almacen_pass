@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}{% if object %}Editar{% else %}Crear{% endif %} Grupo{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h4 class="mb-4">{% if object %}<i class="bi bi-pencil"></i> Editar Grupo{% else %}<i class="bi bi-plus-circle"></i> Crear Grupo{% endif %}</h4>
+                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button type="submit" class="btn btn-primary">{% if object %}Actualizar{% else %}Crear{% endif %}</button></form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

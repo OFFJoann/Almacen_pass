@@ -1,0 +1,330 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mi Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-speedometer2"></i> Mi Panel de Seguridad</h4>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md">
+            <div class="card shadow-sm border-{{ risk_color }} h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-{{ risk_color }} mb-2"><strong>Riesgo General</strong></h6>
+                    <div class="display-6 fw-bold text-{{ risk_color }}">{{ total_risk_score }}%</div>
+                    <span class="badge bg-{{ risk_color }} fs-6">{{ risk_label }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md">
+            <div class="card shadow-sm border-{{ robustness_color }} h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-{{ robustness_color }} mb-2"><strong>Robustez de Contraseñas</strong></h6>
+                    <div class="display-6 fw-bold text-{{ robustness_color }}">{{ robustness_pct }}%</div>
+                    <span class="badge bg-{{ robustness_color }} fs-6">{{ robustness_label }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md">
+            <div class="card shadow-sm border-{% if compromised_count > 0 %}danger{% else %}success{% endif %} h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-{% if compromised_count > 0 %}danger{% else %}success{% endif %} mb-2"><strong>Expuestas en DarkWeb</strong></h6>
+                    {% if compromised_count > 0 %}
+                        <div class="display-6 fw-bold text-danger">{{ compromised_count }}</div>
+                        <span class="badge bg-danger fs-6">Filtradas</span>
+                    {% else %}
+                        <div class="display-6 fw-bold text-success"><i class="bi bi-shield-check"></i></div>
+                        <span class="badge bg-success fs-6">No detectadas</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md">
+            <div class="card shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Autenticación 2FA</h6>
+                    {% if mfa_enabled %}
+                        <div class="display-6 fw-bold text-success"><i class="bi bi-shield-check"></i></div>
+                        <span class="badge bg-success">Activado</span>
+                    {% else %}
+                        <div class="display-6 fw-bold text-muted"><i class="bi bi-shield"></i></div>
+                        <span class="badge bg-secondary">Desactivado</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md">
+            <div class="card shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Contraseñas</h6>
+                    <div class="display-6 fw-bold">{{ total_entries }}</div>
+                    <small class="text-muted">en tu bóveda</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Alertas de Seguridad</h6>
+                </div>
+                <div class="card-body">
+                    {% if weak_passwords_count == 0 and not duplicate_groups and expiring_soon == 0 and mfa_enabled and compromised_count == 0 %}
+                        <div class="text-center text-success py-3">
+                            <i class="bi bi-check-circle-fill fs-1"></i>
+                            <p class="mt-2 mb-0">No hay alertas activas. Buena gestión.</p>
+                        </div>
+                    {% else %}
+                        <ul class="list-group list-group-flush">
+                            {% if weak_passwords_count > 0 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-shield-exclamation text-danger me-2"></i>Contraseñas débiles</span>
+                                    <span class="badge bg-danger rounded-pill">{{ weak_passwords_count }}</span>
+                                </li>
+                            {% endif %}
+                            {% if duplicate_groups %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-files text-warning me-2"></i>Contraseñas reutilizadas</span>
+                                    <span class="badge bg-warning rounded-pill">{{ duplicate_groups|length }}</span>
+                                </li>
+                            {% endif %}
+                            {% if expiring_soon > 0 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-clock-history text-warning me-2"></i>Contraseñas expiradas</span>
+                                    <span class="badge bg-warning rounded-pill">{{ expiring_soon }}</span>
+                                </li>
+                            {% endif %}
+                            {% if entries_expiring_30d > 0 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-hourglass-split text-info me-2"></i>Expiran en 30 días</span>
+                                    <span class="badge bg-info rounded-pill">{{ entries_expiring_30d }}</span>
+                                </li>
+                            {% endif %}
+                            {% if compromised_count > 0 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-shield-exclamation text-danger me-2"></i>Expuestas en filtraciones</span>
+                                    <span class="badge bg-danger rounded-pill">{{ compromised_count }}</span>
+                                </li>
+                            {% endif %}
+                            {% if not mfa_enabled %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-shield text-muted me-2"></i>2FA no activado</span>
+                                    <span class="badge bg-secondary rounded-pill">Recomendado</span>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-files"></i> Contraseñas Reutilizadas</h6>
+                </div>
+                <div class="card-body">
+                    {% if duplicate_groups %}
+                        {% for group in duplicate_groups %}
+                            <div class="mb-2 p-2 bg-light rounded">
+                                <small class="text-muted">Usada en {{ group|length }} entradas:</small>
+                                {% for entry in group %}
+                                    <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none me-1">{{ entry.name }}</a>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-3">
+                            <i class="bi bi-check-circle fs-1"></i>
+                            <p class="mt-2 mb-0">No se detectaron contraseñas reutilizadas.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Sensibilidad</h6>
+                </div>
+                <div class="card-body">
+                    {% if sensitivity_counts %}
+                        {% for item in sensitivity_counts %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>{{ item.sensitivity|capfirst }}</span>
+                                <span class="badge bg-{% if item.sensitivity == 'critical' %}dark{% elif item.sensitivity == 'high' %}danger{% elif item.sensitivity == 'medium' %}warning{% else %}info{% endif %} rounded-pill">{{ item.count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-folder"></i> Carpetas</h6>
+                </div>
+                <div class="card-body">
+                    {% if folders %}
+                        {% for item in folders %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>{{ item.folder__name|default:'Sin carpeta' }}</span>
+                                <span class="badge bg-secondary rounded-pill">{{ item.count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-share"></i> Comparticiones</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>Compartidas por ti</span>
+                        <span class="badge bg-primary rounded-pill">{{ shares_given }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>Compartidas contigo</span>
+                        <span class="badge bg-info rounded-pill">{{ shares_received }}</span>
+                    </div>
+                    {% if shared_to_me %}
+                        <hr>
+                        <small class="text-muted">Últimas compartidas contigo:</small>
+                        {% for share in shared_to_me %}
+                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                <small><a href="{% url 'passwords:detail' share.entry.pk %}">{{ share.entry.name }}</a></small>
+                                <small class="text-muted">{{ share.shared_by.email }}</small>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-activity"></i> Actividad Reciente</h6>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if recent_activity %}
+                        <ul class="list-group list-group-flush">
+                            {% for log in recent_activity %}
+                                <li class="list-group-item py-2 px-0">
+                                    <div class="d-flex justify-content-between">
+                                        <small>
+                                            {% if log.action == 'PASSWORD_CREATED' %}
+                                                <i class="bi bi-plus-circle text-success me-1"></i>
+                                            {% elif log.action == 'PASSWORD_EDITED' %}
+                                                <i class="bi bi-pencil text-primary me-1"></i>
+                                            {% elif log.action == 'PASSWORD_DELETED' %}
+                                                <i class="bi bi-trash text-danger me-1"></i>
+                                            {% elif log.action == 'PASSWORD_VIEWED' %}
+                                                <i class="bi bi-eye text-info me-1"></i>
+                                            {% elif log.action == 'PASSWORD_SHARED' %}
+                                                <i class="bi bi-share text-warning me-1"></i>
+                                            {% elif log.action == 'LOGIN' %}
+                                                <i class="bi bi-box-arrow-in-right text-success me-1"></i>
+                                            {% else %}
+                                                <i class="bi bi-record-circle me-1"></i>
+                                            {% endif %}
+                                            {{ log.get_action_display }}
+                                        </small>
+                                        <small class="text-muted">{{ log.created_at|timesince }}</small>
+                                    </div>
+                                    {% if log.details %}
+                                        <small class="text-muted d-block ms-3">{{ log.details|truncatechars:60 }}</small>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Sin actividad registrada</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> Información</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Entropía promedio</small>
+                        <strong>{{ avg_entropy }} bits</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Contraseña más antigua</small>
+                        <strong>{{ oldest_password_date|date:'Y-m-d'|default:'N/A' }}</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Contraseña más reciente</small>
+                        <strong>{{ newest_password_date|date:'Y-m-d'|default:'N/A' }}</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Favoritas</small>
+                        <strong>{{ favorites }}</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Expuestas en filtraciones</small>
+                        <strong class="{% if compromised_count > 0 %}text-danger{% endif %}">{{ compromised_count }}</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">2FA en entradas</small>
+                        <strong>{{ totp_count }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Último Acceso</h6>
+                </div>
+                <div class="card-body">
+                    {% if last_login %}
+                        <div class="mb-2">
+                            <small class="text-muted d-block">Último inicio de sesión</small>
+                            <strong>{{ last_login.login_at|date:'Y-m-d H:i' }}</strong>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted d-block">IP</small>
+                            <strong>{{ last_login.ip_address|default:'Desconocida' }}</strong>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted d-block">Navegador</small>
+                            <strong>{{ last_login.browser|default:'Desconocido' }}</strong>
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Sin registros</p>
+                    {% endif %}
+                    <hr>
+                    <div class="mb-0">
+                        <small class="text-muted d-block">Sesiones activas ahora</small>
+                        <strong class="{% if active_sessions_count > 3 %}text-warning{% elif active_sessions_count > 1 %}text-info{% endif %}">
+                            {{ active_sessions_count }} sesión{{ active_sessions_count|pluralize:'es' }}
+                        </strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

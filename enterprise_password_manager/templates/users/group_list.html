@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Grupos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-diagram-3-fill"></i> Grupos</h4>
+    <a href="{% url 'users:group_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Nuevo Grupo</a>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead><tr><th>Nombre</th><th>Descripción</th><th>Miembros</th><th>Creado</th><th>Acciones</th></tr></thead>
+                <tbody>{% for g in groups %}<tr><td><a href="{% url 'users:group_detail' g.pk %}">{{ g.name }}</a></td><td><small class="text-muted">{{ g.description|truncatechars:50 }}</small></td><td><span class="badge bg-primary">{{ g.members.count }}</span></td><td><small>{{ g.created_at|date:"Y-m-d" }}</small></td><td><div class="btn-group btn-group-sm"><a href="{% url 'users:group_edit' g.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil"></i></a><a href="{% url 'users:group_delete' g.pk %}" class="btn btn-outline-danger"><i class="bi bi-trash"></i></a></div></td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted">No hay grupos</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

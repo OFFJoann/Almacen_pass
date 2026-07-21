@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Registros de Auditoría{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-journal-text"></i> Registros de Auditoría</h4>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="get" class="row g-2 mb-3">
+            <div class="col-md-3">
+                <select name="action" class="form-select form-select-sm">
+                    <option value="">Todas las Acciones</option>
+                    {% for k,v in action_choices %}<option value="{{ k }}" {% if request.GET.action == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="result" class="form-select form-select-sm">
+                    <option value="">Todos los Resultados</option>
+                    {% for k,v in result_choices %}<option value="{{ k }}" {% if request.GET.result == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-funnel"></i> Filtrar</button>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Resultado</th><th>IP</th><th>Detalles</th></tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                        <tr>
+                            <td><small>{{ log.created_at|date:"Y-m-d H:i" }}</small></td>
+                            <td><small>{{ log.user.email|default:"Sistema" }}</small></td>
+                            <td><span class="badge bg-secondary">{{ log.get_action_display }}</span></td>
+                            <td><span class="badge bg-{% if log.result == 'success' %}success{% elif log.result == 'failure' %}danger{% else %}secondary{% endif %}">{{ log.get_result_display }}</span></td>
+                            <td><small>{{ log.ip_address|default:"-" }}</small></td>
+                            <td><small>{{ log.details|truncatechars:50 }}</small></td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted">No se encontraron registros</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

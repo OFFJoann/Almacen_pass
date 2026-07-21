@@ -1,0 +1,84 @@
+<div class="card shadow-sm mb-3" id="totpSection">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-shield-lock"></i> Autenticación de Dos Factores (2FA)</h6>
+        {% if entry.has_totp %}
+            <form method="post" action="{% url 'passwords:totp_remove' entry.pk %}" hx-post="{% url 'passwords:totp_remove' entry.pk %}" hx-target="#totpSection" hx-swap="outerHTML" class="d-inline">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+        {% endif %}
+    </div>
+    <div class="card-body text-center">
+        {% if entry.has_totp %}
+            <div class="mb-3">
+                <label class="text-muted small">Código actual</label>
+                <div class="d-flex align-items-center justify-content-center gap-2">
+                    <span class="font-monospace fs-3 fw-bold" id="totpCode">{{ entry.get_current_totp }}</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="copyTotp()" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshTotp()" title="Actualizar"><i class="bi bi-arrow-clockwise"></i></button>
+                </div>
+            </div>
+            <small class="text-muted">El código se actualiza cada 30 segundos</small>
+        {% else %}
+            <p class="text-muted mb-3">Añade 2FA escaneando el QR de tu servicio (Cloudflare, Google, GitHub, etc.)</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTotpModal">
+                <i class="bi bi-qr-code-scan"></i> Añadir 2FA
+            </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if not entry.has_totp %}
+<div class="modal fade" id="addTotpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-shield-lock"></i> Configurar 2FA</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="scan-tab" data-bs-toggle="tab" data-bs-target="#scanTab" type="button" role="tab">
+                            <i class="bi bi-camera"></i> Escanear QR
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manualTab" type="button" role="tab">
+                            <i class="bi bi-keyboard"></i> Clave manual
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="scanTab" role="tabpanel">
+                        <p class="small text-muted">Sube una captura de pantalla del código QR que te mostró el servicio</p>
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="qrImageInput" accept="image/*" capture="environment">
+                        </div>
+                        <canvas id="qrCanvas" class="d-none"></canvas>
+                        <div id="qrPreview" class="text-center mb-3"></div>
+                        <div id="qrError" class="alert alert-danger d-none small"></div>
+                        <div id="qrSecret" class="d-none">
+                            <div class="alert alert-success small" id="qrDecodedInfo"></div>
+                            <button class="btn btn-primary w-100" id="saveQrTotpBtn">
+                                <i class="bi bi-check-lg"></i> Guardar 2FA
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="manualTab" role="tabpanel">
+                        <p class="small text-muted">Ingresa manualmente la clave secreta que te proporcionó el servicio</p>
+                        <form id="manualTotpForm" hx-post="{% url 'passwords:totp_generate' entry.pk %}" hx-target="#totpSection" hx-swap="outerHTML">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label class="form-label">Clave secreta</label>
+                                <input type="text" class="form-control font-monospace" name="secret" placeholder="ej: JBSWY3DPEHPK3PXP" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Guardar 2FA</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

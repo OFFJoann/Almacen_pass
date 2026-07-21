@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Crear Categoría{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h4 class="mb-4"><i class="bi bi-tag"></i> Crear Categoría</h4>
+                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}</div>{% endfor %}<button type="submit" class="btn btn-primary">Crear</button></form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
