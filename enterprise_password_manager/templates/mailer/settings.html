@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}SMTP y Notificaciones{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-envelope-at"></i> SMTP y Notificaciones</h4>
+    <span class="badge {% if configured %}bg-success{% else %}bg-warning text-dark{% endif %}">
+        {% if configured %}SMTP activo{% else %}SMTP no configurado{% endif %}
+    </span>
+</div>
+
+{% include 'mailer/_tabs.html' %}
+
+<div class="row">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-gear"></i> Configuración del servidor SMTP</h6></div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="row">
+                        {% for field in form %}
+                            {% if field.name == 'is_active' %}
+                                <div class="col-12 mb-3 form-check form-switch">
+                                    {{ field }}
+                                    <label class="form-check-label fw-bold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    <div class="form-text">{{ field.help_text }}</div>
+                                </div>
+                            {% else %}
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                    {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar configuración</button>
+                        <a href="{% url 'mailer:settings' %}?check=1" class="btn btn-outline-secondary"><i class="bi bi-plug"></i> Probar conexión</a>
+                    </div>
+                </form>
+                {% if smtp_error %}
+                    <div class="alert alert-danger mt-3 mb-0"><strong>Error de conexión:</strong> {{ smtp_error }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-send"></i> Correo de prueba</h6></div>
+            <div class="card-body">
+                <p class="text-muted small">Envía un correo de prueba para validar la configuración guardada.</p>
+                <form method="post" action="{% url 'mailer:settings_send_test' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ test_form.to_email.label }}</label>
+                        {{ test_form.to_email }}
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary"><i class="bi bi-send"></i> Enviar correo de prueba</button>
+                </form>
+            </div>
+        </div>
+        {% if smtp %}
+        <div class="card shadow-sm mt-3">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle"></i> Configuración actual</h6></div>
+            <div class="card-body small">
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Servidor:</strong> {{ smtp.host }}:{{ smtp.port }}</li>
+                    <li><strong>Usuario:</strong> {{ smtp.username|default:'—' }}</li>
+                    <li><strong>Cifrado:</strong> {{ smtp.get_encryption_display }}</li>
+                    <li><strong>Remitente:</strong> {{ smtp.from_name|default:'—' }} &lt;{{ smtp.from_email|default:'—' }}&gt;</li>
+                    <li><strong>Empresa:</strong> {{ smtp.company_name|default:'—' }}</li>
+                    <li><strong>Contraseña:</strong> {% if smtp.password_encrypted %}<i class="bi bi-lock-fill text-success"></i> almacenada (cifrada){% else %}<span class="text-muted">no definida</span>{% endif %}</li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

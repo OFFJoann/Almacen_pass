@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block title %}Grupos de Notificaciones{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-collection"></i> Grupos de Notificaciones</h4>
+    <a href="{% url 'mailer:group_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Nuevo Grupo</a>
+</div>
+
+{% include 'mailer/_tabs.html' %}
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="get" class="row g-2 mb-3">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar grupos..." value="{{ request.GET.search }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i></button>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Descripción</th>
+                        <th>Destinatarios</th>
+                        <th>Estado</th>
+                        <th>Creado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for g in groups %}
+                        <tr>
+                            <td><a href="{% url 'mailer:group_detail' g.pk %}">{{ g.name }}</a></td>
+                            <td class="text-muted small">{{ g.description|default:'—'|truncatechars:60 }}</td>
+                            <td><span class="badge bg-info text-dark">{{ g.num_recipients }}</span></td>
+                            <td>
+                                {% if g.is_active %}
+                                    <span class="badge bg-success">Habilitado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Deshabilitado</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ g.created_at|date:'Y-m-d' }}</small></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'mailer:group_detail' g.pk %}" class="btn btn-outline-primary" title="Configurar"><i class="bi bi-sliders"></i></a>
+                                    <a href="{% url 'mailer:group_edit' g.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                    <a href="{% url 'mailer:group_delete' g.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted">No hay grupos de notificaciones</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

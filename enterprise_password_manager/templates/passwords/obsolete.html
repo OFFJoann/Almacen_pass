@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Obsoletos - TICOlvidé{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-shield-exclamation"></i> Obsoletos</h4>
+    <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+<div class="alert alert-warning d-flex align-items-center" role="alert">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    <div>Estos registros no pertenecen a ningún sistema reconocido. Se conservan por seguridad y <strong>no pueden devolverse ni eliminarse</strong>. Solo un administrador puede eliminarlos desde el panel de administración.</div>
+</div>
+
+{% if entries %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><h6 class="mb-0"><i class="bi bi-key-fill"></i> Contraseñas obsoletas ({{ entries|length }})</h6></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Marcada el</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                        <tr>
+                            <td>{{ entry.name }}</td>
+                            <td><small class="text-muted">{{ entry.obsoleted_at|date:'Y-m-d H:i' }}</small></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if secrets %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><h6 class="mb-0"><i class="bi bi-incognito"></i> Secretos obsoletos ({{ secrets|length }})</h6></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Tipo</th>
+                        <th>Marcado el</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for secret in secrets %}
+                        <tr>
+                            <td>{{ secret.name }}</td>
+                            <td><span class="badge bg-{% if secret.type == 'api_key' %}warning{% elif secret.type == 'ssh_key' %}success{% elif secret.type == 'credit_card' %}info{% else %}secondary{% endif %}">{{ secret.get_type_display }}</span></td>
+                            <td><small class="text-muted">{{ secret.obsoleted_at|date:'Y-m-d H:i' }}</small></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not entries and not secrets %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-shield-check display-1 text-muted"></i>
+            <h5 class="mt-3">No tienes registros obsoletos</h5>
+            <p class="text-muted">Si encuentras una contraseña o secreto del que no recuerdas su uso, márcalo como obsoleto desde su detalle y aparecerá aquí.</p>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

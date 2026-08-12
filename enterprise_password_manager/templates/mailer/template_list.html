@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Plantillas de Correo{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> Plantillas de Correo</h4>
+</div>
+
+{% include 'mailer/_tabs.html' %}
+
+<p class="text-muted">
+    Cada evento tiene una plantilla personalizable (asunto, contenido HTML y texto plano) con variables dinámicas.
+</p>
+
+{% regroup events by get_category_display as categories %}
+{% for cat in categories %}
+    <div class="card shadow-sm mb-3">
+        <div class="card-header"><h6 class="mb-0">{{ cat.grouper }}</h6></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <tbody>
+                        {% for e in cat.list %}
+                            <tr>
+                                <td class="align-middle">
+                                    <i class="bi bi-{{ e.icon }} text-muted me-2"></i>
+                                    <strong>{{ e.name }}</strong>
+                                    <div class="text-muted small">{{ e.description|truncatechars:90 }}</div>
+                                </td>
+                                <td class="align-middle text-muted small d-none d-md-table-cell">
+                                    {% if e.template %}{{ e.template.subject|default:'Sin asunto'|truncatechars:45 }}{% else %}Plantilla por defecto{% endif %}
+                                </td>
+                                <td class="text-end align-middle">
+                                    <a href="{% url 'mailer:template_edit' e.code %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i> Editar plantilla
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% empty %}
+    <div class="alert alert-info">No hay eventos configurados.</div>
+{% endfor %}
+{% endblock %}
