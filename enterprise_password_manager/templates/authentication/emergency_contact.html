@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Contacto de Emergencia{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h4 class="mb-2"><i class="bi bi-shield-plus"></i> Contacto de Emergencia</h4>
+                <p class="text-muted mb-4">
+                    Los administradores deben registrar un contacto de confianza. Si olvidas tu contraseña,
+                    se enviará una notificación de recuperación al correo de este contacto.
+                </p>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.emergency_contact_name.label }}</label>
+                        {{ form.emergency_contact_name }}
+                        {% if form.emergency_contact_name.errors %}<div class="text-danger small">{{ form.emergency_contact_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.emergency_contact_email.label }}</label>
+                        {{ form.emergency_contact_email }}
+                        {% if form.emergency_contact_email.errors %}<div class="text-danger small">{{ form.emergency_contact_email.errors }}</div>{% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Guardar Contacto de Emergencia
+                    </button>
+                    <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
