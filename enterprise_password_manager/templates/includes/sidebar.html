@@ -33,9 +33,21 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="{% url 'passwords:obsolete' %}" class="nav-link {% if request.resolver_match.url_name == 'obsolete' %}active{% endif %}">
+                <i class="bi bi-shield-exclamation"></i>
+                <span class="sidebar-text">Obsoletos</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="{% url 'passwords:import' %}" class="nav-link">
                 <i class="bi bi-upload"></i>
                 <span class="sidebar-text">Importar</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="{% url 'secrets:list' %}" class="nav-link {% if request.resolver_match.namespace == 'secrets' %}active{% endif %}">
+                <i class="bi bi-incognito"></i>
+                <span class="sidebar-text">Secretos</span>
             </a>
         </li>
         <li class="nav-item">
@@ -45,41 +57,55 @@
             </a>
         </li>
     </ul>
-    {% if user.is_staff %}
+    {% if user.can_manage_users %}
         <div class="sidebar-section">
             <small class="text-muted px-3 sidebar-text">Administración</small>
         </div>
         <ul class="sidebar-nav">
             <li class="nav-item">
-                <a href="{% url 'admin_dashboard:dashboard' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' %}active{% endif %}">
+                <a href="{% url 'admin_dashboard:dashboard' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
                     <i class="bi bi-speedometer2"></i>
                     <span class="sidebar-text">Panel</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a href="{% url 'users:list' %}" class="nav-link {% if request.resolver_match.url_name == 'list' %}active{% endif %}">
+                <a href="{% url 'admin_dashboard:obsolete' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' and request.resolver_match.url_name == 'obsolete' %}active{% endif %}">
+                    <i class="bi bi-shield-exclamation"></i>
+                    <span class="sidebar-text">Gestionar Obsoletos</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'users:list' %}" class="nav-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.namespace == 'users' %}active{% endif %}">
                     <i class="bi bi-people-fill"></i>
                     <span class="sidebar-text">Usuarios</span>
                 </a>
             </li>
-            <li class="nav-item">
-                <a href="{% url 'users:group_list' %}" class="nav-link">
-                    <i class="bi bi-diagram-3-fill"></i>
-                    <span class="sidebar-text">Grupos</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="{% url 'audit:log_list' %}" class="nav-link">
-                    <i class="bi bi-journal-text"></i>
-                    <span class="sidebar-text">Registros de Auditoría</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="{% url 'sso:settings' %}" class="nav-link">
-                    <i class="bi bi-shield-check"></i>
-                    <span class="sidebar-text">SSO</span>
-                </a>
-            </li>
+            {% if user.is_superadmin %}
+                <li class="nav-item">
+                    <a href="{% url 'users:group_list' %}" class="nav-link">
+                        <i class="bi bi-diagram-3-fill"></i>
+                        <span class="sidebar-text">Grupos</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{% url 'audit:log_list' %}" class="nav-link">
+                        <i class="bi bi-journal-text"></i>
+                        <span class="sidebar-text">Registros de Auditoría</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{% url 'sso:settings' %}" class="nav-link">
+                        <i class="bi bi-shield-check"></i>
+                        <span class="sidebar-text">SSO</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{% url 'mailer:settings' %}" class="nav-link {% if request.resolver_match.namespace == 'mailer' %}active{% endif %}">
+                        <i class="bi bi-envelope-at"></i>
+                        <span class="sidebar-text">SMTP y Notificaciones</span>
+                    </a>
+                </li>
+            {% endif %}
         </ul>
     {% endif %}
     <div class="sidebar-footer mt-auto">

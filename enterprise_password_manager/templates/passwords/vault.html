@@ -138,14 +138,45 @@
                                         </td>
                                         <td><small class="text-muted">{{ entry.last_accessed|timesince|default:'Nunca' }}</small></td>
                                         <td>
-                                            <div class="btn-group btn-group-sm">
-                                                <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
-                                                <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
-                                                <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
-                                                <form method="post" action="{% url 'passwords:entry_delete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Mover a la papelera?')">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
-                                                </form>
+                                            <div class="d-inline-flex align-items-center gap-1">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
+                                                    <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                                    <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
+                                                    <form method="post" action="{% url 'passwords:entry_delete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Mover a la papelera?')">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                                    </form>
+                                                </div>
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'username')">
+                                                                <i class="bi bi-person"></i> Copiar usuario
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'password')">
+                                                                <i class="bi bi-key"></i> Copiar contraseña
+                                                            </a>
+                                                        </li>
+                                                        {% if entry.url %}
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'url')">
+                                                                    <i class="bi bi-link-45deg"></i> Copiar URL
+                                                                </a>
+                                                            </li>
+                                                        {% endif %}
+                                                        {% if entry.has_totp %}
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'totp')">
+                                                                    <i class="bi bi-shield-lock"></i> Copiar MFA
+                                                                </a>
+                                                            </li>
+                                                        {% endif %}
+                                                    </ul>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -199,7 +230,14 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <a href="{% url 'passwords:detail' share.entry.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="{% url 'passwords:detail' share.entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
+                                                {% if share.permission == 'write' %}
+                                                    <a href="{% url 'passwords:entry_edit' share.entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                                {% elif share.permission == 'reshare' %}
+                                                    <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Re-compartir"><i class="bi bi-share"></i></a>
+                                                {% endif %}
+                                            </div>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -211,4 +249,25 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function copyEntryData(pk, field) {
+        try {
+            const res = await fetch('/vault/entry/' + pk + '/copy-data/');
+            const data = await res.json();
+            const value = data[field] || '';
+            if (!value) {
+                showToast('No hay nada que copiar', 'warning');
+                return;
+            }
+            await copyToClipboard(value);
+            const label = field === 'username' ? 'Usuario' : (field === 'password' ? 'Contraseña' : (field === 'url' ? 'URL' : 'Código MFA'));
+            showToast(label + ' copiado al portapapeles', 'success');
+        } catch (err) {
+            showToast('No se pudo copiar', 'danger');
+        }
+    }
+</script>
 {% endblock %}

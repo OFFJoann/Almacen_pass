@@ -142,7 +142,16 @@ class PasswordEntry(models.Model):
     is_favorite = models.BooleanField(_('favorito'), default=False)
     is_deleted = models.BooleanField(_('eliminado'), default=False)
     deleted_at = models.DateTimeField(_('eliminado el'), null=True, blank=True)
+    is_obsolete = models.BooleanField(
+        _('obsoleta'), default=False,
+        help_text=_('Contraseña de origen desconocido que se conserva por seguridad en el módulo de obsoletos.')
+    )
+    obsoleted_at = models.DateTimeField(_('marcada obsoleta el'), null=True, blank=True)
     expires_at = models.DateTimeField(_('expira el'), null=True, blank=True)
+    expiry_notified_at = models.DateTimeField(
+        _('notificado de vencimiento el'), null=True, blank=True,
+        help_text=_('Momento en que se envió la notificación de vencimiento.')
+    )
     last_accessed = models.DateTimeField(_('último acceso'), null=True, blank=True)
     access_count = models.PositiveIntegerField(_('conteo de accesos'), default=0)
     version = models.PositiveIntegerField(_('versión'), default=1)
@@ -325,6 +334,12 @@ class Share(models.Model):
         self.is_revoked = True
         self.revoked_at = timezone.now()
         self.save()
+
+    def update_permission(self, new_permission, expires_at=None):
+        self.permission = new_permission
+        if expires_at is not None:
+            self.expires_at = expires_at
+        self.save(update_fields=['permission', 'expires_at'])
 
 
 class ShareAccessLog(models.Model):

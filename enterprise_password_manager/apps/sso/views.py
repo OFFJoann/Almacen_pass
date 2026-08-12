@@ -2,12 +2,12 @@ import requests
 import json
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import UpdateView
 from urllib.parse import parse_qs
@@ -19,6 +19,8 @@ from apps.authentication.utils import parse_user_agent, get_client_ip
 
 @login_required
 def sso_settings(request):
+    if not request.user.is_superadmin():
+        raise PermissionDenied
     config = SSOConfiguration.objects.first()
     logs = SSOLog.objects.all()[:20]
     return render(request, 'sso/settings.html', {
@@ -29,6 +31,8 @@ def sso_settings(request):
 
 @login_required
 def sso_configure(request):
+    if not request.user.is_superadmin():
+        raise PermissionDenied
     config = SSOConfiguration.objects.first()
     if request.method == 'POST':
         form = SSOConfigurationForm(request.POST, instance=config)
@@ -57,6 +61,8 @@ def sso_configure(request):
 
 @login_required
 def sso_test_connection(request):
+    if not request.user.is_superadmin():
+        return JsonResponse({'success': False, 'error': 'No autorizado'}, status=403)
     config = SSOConfiguration.objects.first()
     if not config:
         return JsonResponse({'success': False, 'error': 'No se encontró configuración SSO'})
@@ -88,6 +94,8 @@ def sso_test_connection(request):
 
 @login_required
 def sso_toggle(request):
+    if not request.user.is_superadmin():
+        raise PermissionDenied
     config = SSOConfiguration.objects.first()
     if not config:
         messages.error(request, _('No se encontró configuración SSO'))

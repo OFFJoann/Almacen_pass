@@ -39,14 +39,33 @@ class UserCreateForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ('email', 'full_name', 'phone', 'is_active', 'is_staff')
+        fields = ('email', 'full_name', 'phone', 'is_active', 'role',
+                  'emergency_contact_name', 'emergency_contact_email')
         widgets = {
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'full_name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_staff': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'role': forms.Select(attrs={'class': 'form-control'}),
+            'emergency_contact_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre del contacto'}),
+            'emergency_contact_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'contacto@example.com'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
+        super().__init__(*args, **kwargs)
+        if not self.request_user or not self.request_user.is_superadmin():
+            self.fields.pop('role')
+
+    def clean(self):
+        cleaned = super().clean()
+        role = cleaned.get('role')
+        if role in ('superadmin', 'admin_usuarios'):
+            if not cleaned.get('emergency_contact_name'):
+                self.add_error('emergency_contact_name', _('Los administradores deben registrar el nombre del contacto de emergencia.'))
+            if not cleaned.get('emergency_contact_email'):
+                self.add_error('emergency_contact_email', _('Los administradores deben registrar el correo del contacto de emergencia.'))
+        return cleaned
 
     def clean_password_confirm(self):
         password = self.cleaned_data.get('password')
@@ -66,15 +85,34 @@ class UserCreateForm(forms.ModelForm):
 class UserEditForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ('email', 'full_name', 'phone', 'is_active', 'is_staff', 'force_password_change')
+        fields = ('email', 'full_name', 'phone', 'is_active', 'role', 'force_password_change',
+                  'emergency_contact_name', 'emergency_contact_email')
         widgets = {
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'full_name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_staff': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'role': forms.Select(attrs={'class': 'form-control'}),
             'force_password_change': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'emergency_contact_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre del contacto'}),
+            'emergency_contact_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'contacto@example.com'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
+        super().__init__(*args, **kwargs)
+        if not self.request_user or not self.request_user.is_superadmin():
+            self.fields.pop('role')
+
+    def clean(self):
+        cleaned = super().clean()
+        role = cleaned.get('role')
+        if role in ('superadmin', 'admin_usuarios'):
+            if not cleaned.get('emergency_contact_name'):
+                self.add_error('emergency_contact_name', _('Los administradores deben registrar el nombre del contacto de emergencia.'))
+            if not cleaned.get('emergency_contact_email'):
+                self.add_error('emergency_contact_email', _('Los administradores deben registrar el correo del contacto de emergencia.'))
+        return cleaned
 
 
 class GroupForm(forms.ModelForm):
@@ -86,8 +124,10 @@ class GroupForm(forms.ModelForm):
 
     class Meta:
         model = Group
-        fields = ('name', 'description', 'members')
+        fields = ('name', 'description', 'members', 'min_password_length', 'trash_retention_days')
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'min_password_length': forms.NumberInput(attrs={'class': 'form-control', 'min': 4, 'max': 128}),
+            'trash_retention_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 365}),
         }

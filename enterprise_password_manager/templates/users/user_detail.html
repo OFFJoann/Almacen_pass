@@ -9,9 +9,19 @@
                 <h5>{{ user_obj.full_name }}</h5>
                 <p class="text-muted">{{ user_obj.email }}</p>
                 <span class="badge bg-{% if user_obj.is_active %}success{% else %}danger{% endif %}">{% if user_obj.is_active %}Activo{% else %}Deshabilitado{% endif %}</span>
+                <span class="badge bg-{% if user_obj.role == 'superadmin' %}dark{% elif user_obj.role == 'admin_usuarios' %}info{% else %}secondary{% endif %} ms-1">
+                    {% if user_obj.role == 'superadmin' %}SuperAdmin{% elif user_obj.role == 'admin_usuarios' %}Admin Usuarios{% else %}Estándar{% endif %}
+                </span>
                 <hr>
                 <div class="text-start">
                     <small class="d-block">MFA: {% if user_obj.mfa_enabled %}<i class="bi bi-shield-check text-success"></i> Activado{% else %}<i class="bi bi-shield text-muted"></i> Desactivado{% endif %}</small>
+                    <small class="d-block">Contacto de Emergencia: 
+                        {% if user_obj.emergency_contact_email %}
+                            {{ user_obj.emergency_contact_name }} ({{ user_obj.emergency_contact_email }})
+                        {% else %}
+                            <span class="text-danger">No registrado</span>
+                        {% endif %}
+                    </small>
                     <small class="d-block">Puntaje de Seguridad: {{ user_obj.security_score }}%</small>
                     <small class="d-block">Último Acceso: {{ user_obj.last_login|timesince|default:"Nunca" }} atrás</small>
                     <small class="d-block">Creado: {{ user_obj.created_at|date:"Y-m-d" }}</small>

@@ -32,6 +32,11 @@
                         <button type="submit" class="btn btn-primary w-100 btn-lg mb-3">
                             <i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión
                         </button>
+                        <div class="text-center mb-3">
+                            <a href="{% url 'authentication:password_reset_request' %}" class="text-decoration-none">
+                                <i class="bi bi-key"></i> ¿Olvidaste tu contraseña?
+                            </a>
+                        </div>
                         {% if sso_enabled %}
                             <hr>
                             <a href="{% url 'sso:login' %}" class="btn btn-outline-dark w-100">

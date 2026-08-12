@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Papelera - Administrador de Contraseñas{% endblock %}
+{% block title %}Papelera - TICOlvidé{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-trash-fill"></i> Papelera</h4>
     <div class="d-flex gap-2">
-        <form method="post" action="{% url 'passwords:empty_trash' %}" onsubmit="return confirm('¿Vaciar papelera? Solo se eliminarán las contraseñas que llevan más de 7 días en la papelera.')">
+        <form method="post" action="{% url 'passwords:empty_trash' %}" onsubmit="return confirm('¿Vaciar papelera? Solo se eliminarán los elementos que llevan más de {{ retention_days }} días en la papelera.')">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Vaciar Papelera</button>
         </form>
@@ -15,54 +15,108 @@
     </div>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-body">
-        {% if entries %}
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+{% if entries %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><h6 class="mb-0"><i class="bi bi-key-fill"></i> Contraseñas</h6></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Eliminado el</th>
+                        <th>Días restantes</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
                         <tr>
-                            <th>Nombre</th>
-                            <th>Eliminado el</th>
-                            <th>Días restantes</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for entry in entries %}
-                            <tr>
-                                <td>{{ entry.name }}</td>
-                                <td><small class="text-muted">{{ entry.deleted_at|date:'Y-m-d H:i' }}</small></td>
-                                <td>
+                            <td>{{ entry.name }}</td>
+                            <td><small class="text-muted">{{ entry.deleted_at|date:'Y-m-d H:i' }}</small></td>
+                            <td>
+                                {% if entry.can_permanently_delete %}
+                                    <span class="badge bg-danger">Disponible</span>
+                                {% else %}
+                                    <small class="text-muted">{{ entry.days_remaining }} día(s)</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'passwords:entry_restore' entry.pk %}" class="btn btn-outline-success" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i></a>
                                     {% if entry.can_permanently_delete %}
-                                        <span class="badge bg-danger">Disponible</span>
+                                        <a href="{% url 'passwords:entry_permanent_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar para Siempre" onclick="return confirm('¿Eliminar esta contraseña permanentemente?')">
+                                            <i class="bi bi-trash-fill"></i>
+                                        </a>
                                     {% else %}
-                                        <small class="text-muted">{{ entry.days_remaining }} día(s)</small>
+                                        <span class="btn btn-outline-danger btn-sm disabled" title="Debe esperar {{ retention_days }} días desde que se eliminó"><i class="bi bi-trash-fill"></i></span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'passwords:entry_restore' entry.pk %}" class="btn btn-outline-success" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i></a>
-                                        {% if entry.can_permanently_delete %}
-                                            <a href="{% url 'passwords:entry_permanent_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar para Siempre" onclick="return confirm('¿Eliminar esta contraseña permanentemente?')">
-                                                <i class="bi bi-trash-fill"></i>
-                                            </a>
-                                        {% else %}
-                                            <span class="btn btn-outline-danger btn-sm disabled" title="Debe esperar 7 días desde que se eliminó"><i class="bi bi-trash-fill"></i></span>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="text-center py-5">
-                <i class="bi bi-trash display-1 text-muted"></i>
-                <h5 class="mt-3">La papelera está vacía</h5>
-            </div>
-        {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+{% endif %}
+
+{% if secrets %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><h6 class="mb-0"><i class="bi bi-incognito"></i> Secretos</h6></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Tipo</th>
+                        <th>Eliminado el</th>
+                        <th>Días restantes</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for secret in secrets %}
+                        <tr>
+                            <td>{{ secret.name }}</td>
+                            <td><span class="badge bg-{% if secret.type == 'api_key' %}warning{% elif secret.type == 'ssh_key' %}success{% elif secret.type == 'credit_card' %}info{% else %}secondary{% endif %}">{{ secret.get_type_display }}</span></td>
+                            <td><small class="text-muted">{{ secret.deleted_at|date:'Y-m-d H:i' }}</small></td>
+                            <td>
+                                {% if secret.can_permanently_delete %}
+                                    <span class="badge bg-danger">Disponible</span>
+                                {% else %}
+                                    <small class="text-muted">{{ secret.days_remaining }} día(s)</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'secrets:restore' secret.pk %}" class="btn btn-outline-success" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i></a>
+                                    {% if secret.can_permanently_delete %}
+                                        <a href="{% url 'secrets:permanent_delete' secret.pk %}" class="btn btn-outline-danger" title="Eliminar para Siempre" onclick="return confirm('¿Eliminar este secreto permanentemente?')">
+                                            <i class="bi bi-trash-fill"></i>
+                                        </a>
+                                    {% else %}
+                                        <span class="btn btn-outline-danger btn-sm disabled" title="Debe esperar {{ retention_days }} días"><i class="bi bi-trash-fill"></i></span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not entries and not secrets %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-trash display-1 text-muted"></i>
+            <h5 class="mt-3">La papelera está vacía</h5>
+        </div>
+    </div>
+{% endif %}
 {% endblock %}

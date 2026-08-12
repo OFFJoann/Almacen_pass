@@ -1,22 +1,35 @@
-from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.decorators import login_required
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, View
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext_lazy as _
 from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
 from .models import User, Group, GroupMembership, LoginHistory, ActiveSession
 from .forms import UserCreateForm, UserEditForm, GroupForm
 from .admin_forms import VaultTransferForm
 from .tasks import do_transfer
+from apps.mailer.services import notify_event
 
 
-class UserListView(PermissionRequiredMixin, ListView):
+class AdminUsersMixin(UserPassesTestMixin):
+    """Allow access to superadmin and admin_usuarios."""
+    def test_func(self):
+        return self.request.user.is_authenticated and self.request.user.can_manage_users()
+
+
+class SuperAdminMixin(UserPassesTestMixin):
+    """Allow access only to superadmin."""
+    def test_func(self):
+        return self.request.user.is_authenticated and self.request.user.is_superadmin()
+
+
+class UserListView(AdminUsersMixin, ListView):
     model = User
     template_name = 'users/user_list.html'
     context_object_name = 'users'
-    permission_required = 'users.view_user'
     paginate_by = 25
 
     def get_queryset(self):
@@ -32,35 +45,48 @@ class UserListView(PermissionRequiredMixin, ListView):
         return qs
 
 
-class UserCreateView(PermissionRequiredMixin, CreateView):
+class UserCreateView(AdminUsersMixin, CreateView):
     model = User
     form_class = UserCreateForm
     template_name = 'users/user_form.html'
-    permission_required = 'users.add_user'
     success_url = reverse_lazy('users:list')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
     def form_valid(self, form):
+        response = super().form_valid(form)
+        notify_event('user_created', {
+            'usuario': form.instance.email,
+            'invitado_por': self.request.user.email,
+            'nuevo_estado': 'Activo',
+        })
         messages.success(self.request, _('Usuario creado exitosamente'))
-        return super().form_valid(form)
+        return response
 
 
-class UserUpdateView(PermissionRequiredMixin, UpdateView):
+class UserUpdateView(AdminUsersMixin, UpdateView):
     model = User
     form_class = UserEditForm
     template_name = 'users/user_form.html'
-    permission_required = 'users.change_user'
 
     def get_success_url(self):
         return reverse_lazy('users:list')
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
     def form_valid(self, form):
         messages.success(self.request, _('Usuario actualizado exitosamente'))
         return super().form_valid(form)
 
 
-class UserDeleteView(PermissionRequiredMixin, View):
+class UserDeleteView(AdminUsersMixin, View):
     model = User
-    permission_required = 'users.delete_user'
 
     def get_object(self):
         return get_object_or_404(User, pk=self.kwargs['pk'])
@@ -91,6 +117,10 @@ class UserDeleteView(PermissionRequiredMixin, View):
                 })
             do_transfer(str(obj.pk), str(target_user.pk), request.user.email)
             User.objects.filter(pk=obj.pk).delete()
+            notify_event('user_deleted', {
+                'usuario': obj.email,
+                'invitado_por': request.user.email,
+            })
             messages.success(
                 request,
                 _('Bóveda de %(source)s transferida a %(target)s y usuario eliminado.')
@@ -102,10 +132,9 @@ class UserDeleteView(PermissionRequiredMixin, View):
         })
 
 
-class UserDetailView(PermissionRequiredMixin, DetailView):
+class UserDetailView(AdminUsersMixin, DetailView):
     model = User
     template_name = 'users/user_detail.html'
-    permission_required = 'users.view_user'
     context_object_name = 'user_obj'
 
     def get_context_data(self, **kwargs):
@@ -115,9 +144,10 @@ class UserDetailView(PermissionRequiredMixin, DetailView):
         return context
 
 
+@login_required
 def user_toggle_active(request, pk):
     user = get_object_or_404(User, pk=pk)
-    if request.user.has_perm('users.change_user'):
+    if request.user.can_manage_users():
         user.is_active = not user.is_active
         user.save()
         status = 'enabled' if user.is_active else 'disabled'
@@ -125,9 +155,12 @@ def user_toggle_active(request, pk):
     return redirect('users:list')
 
 
-@staff_member_required
+@login_required
 def user_reset_password(request, pk):
     user = get_object_or_404(User, pk=pk)
+    if not request.user.can_manage_users():
+        messages.error(request, _('No tienes permiso para restablecer contraseñas.'))
+        return redirect('users:list')
     if request.method == 'POST':
         password = request.POST.get('new_password', '').strip()
         confirm = request.POST.get('confirm_password', '').strip()
@@ -152,19 +185,17 @@ def user_reset_password(request, pk):
     return render(request, 'users/user_reset_password.html', {'user_obj': user})
 
 
-class GroupListView(PermissionRequiredMixin, ListView):
+class GroupListView(SuperAdminMixin, ListView):
     model = Group
     template_name = 'users/group_list.html'
     context_object_name = 'groups'
-    permission_required = 'users.view_group'
     paginate_by = 25
 
 
-class GroupCreateView(PermissionRequiredMixin, CreateView):
+class GroupCreateView(SuperAdminMixin, CreateView):
     model = Group
     form_class = GroupForm
     template_name = 'users/group_form.html'
-    permission_required = 'users.add_group'
     success_url = reverse_lazy('users:group_list')
 
     def form_valid(self, form):
@@ -179,11 +210,10 @@ class GroupCreateView(PermissionRequiredMixin, CreateView):
         return response
 
 
-class GroupUpdateView(PermissionRequiredMixin, UpdateView):
+class GroupUpdateView(SuperAdminMixin, UpdateView):
     model = Group
     form_class = GroupForm
     template_name = 'users/group_form.html'
-    permission_required = 'users.change_group'
     success_url = reverse_lazy('users:group_list')
 
     def form_valid(self, form):
@@ -200,10 +230,9 @@ class GroupUpdateView(PermissionRequiredMixin, UpdateView):
         return response
 
 
-class GroupDeleteView(PermissionRequiredMixin, DeleteView):
+class GroupDeleteView(SuperAdminMixin, DeleteView):
     model = Group
     template_name = 'users/group_confirm_delete.html'
-    permission_required = 'users.delete_group'
     success_url = reverse_lazy('users:group_list')
 
     def delete(self, request, *args, **kwargs):
@@ -211,8 +240,7 @@ class GroupDeleteView(PermissionRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class GroupDetailView(PermissionRequiredMixin, DetailView):
+class GroupDetailView(SuperAdminMixin, DetailView):
     model = Group
     template_name = 'users/group_detail.html'
-    permission_required = 'users.view_group'
     context_object_name = 'group_obj'

@@ -12,8 +12,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(_('nombre completo'), max_length=255)
     phone = models.CharField(_('teléfono'), max_length=50, blank=True, default='')
     avatar = models.ImageField(_('avatar'), upload_to='avatars/', blank=True, null=True)
+    ROLE_CHOICES = [
+        ('superadmin', _('SuperAdmin')),
+        ('admin_usuarios', _('Admin Usuarios')),
+        ('estandar', _('Estándar')),
+    ]
+    role = models.CharField(_('rol'), max_length=20, choices=ROLE_CHOICES, default='estandar')
     is_active = models.BooleanField(_('activo'), default=True)
-    is_staff = models.BooleanField(_('es staff'), default=False)
+    is_staff = models.BooleanField(_('es staff'), default=False, editable=False)
     is_superuser = models.BooleanField(_('es superusuario'), default=False)
     force_password_change = models.BooleanField(_('forzar cambio de contraseña'), default=False)
     security_score = models.FloatField(_('puntaje de seguridad'), default=0.0)
@@ -22,6 +28,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_activity = models.DateTimeField(_('última actividad'), null=True, blank=True)
     mfa_enabled = models.BooleanField(_('MFA activado'), default=False)
     mfa_secret = models.CharField(_('secreto MFA'), max_length=64, blank=True, default='')
+    emergency_contact_name = models.CharField(_('nombre del contacto de emergencia'), max_length=255, blank=True, default='')
+    emergency_contact_email = models.EmailField(_('correo del contacto de emergencia'), blank=True, default='')
     trusted_devices = models.JSONField(_('dispositivos confiables'), default=list, blank=True)
     preferences = models.JSONField(_('preferencias'), default=dict, blank=True)
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
@@ -51,6 +59,27 @@ class User(AbstractBaseUser, PermissionsMixin):
     def get_short_name(self):
         return self.email.split('@')[0]
 
+    def is_superadmin(self):
+        return self.role == 'superadmin'
+
+    def is_admin_usuarios(self):
+        return self.role == 'admin_usuarios'
+
+    def is_estandar(self):
+        return self.role == 'estandar'
+
+    def can_manage_users(self):
+        return self.role in ('superadmin', 'admin_usuarios')
+
+    def has_emergency_contact(self):
+        return bool(self.emergency_contact_email.strip())
+
+    def save(self, *args, **kwargs):
+        self.is_staff = self.role in ('superadmin', 'admin_usuarios')
+        if self.role == 'superadmin':
+            self.is_superuser = True
+        super().save(*args, **kwargs)
+
 
 class Group(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -61,6 +90,14 @@ class Group(models.Model):
     )
     members = models.ManyToManyField(
         User, through='GroupMembership', related_name='custom_groups'
+    )
+    min_password_length = models.PositiveSmallIntegerField(
+        _('longitud mínima de contraseña'), default=8,
+        help_text=_('Longitud mínima que deben tener las contraseñas guardadas por miembros del grupo.')
+    )
+    trash_retention_days = models.PositiveSmallIntegerField(
+        _('días en papelera'), default=7,
+        help_text=_('Días que una contraseña debe permanecer en la papelera antes de poder eliminarse permanentemente.')
     )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
@@ -147,3 +184,14 @@ class ActiveSession(models.Model):
 
     def __str__(self):
         return f'{self.user.email} - {self.ip_address}'
+
+
+def get_user_effective_policy(user):
+    """Return the most restrictive policy across all groups the user belongs to."""
+    groups = Group.objects.filter(members=user)
+    if not groups:
+        return {'min_password_length': 8, 'trash_retention_days': 7}
+    return {
+        'min_password_length': max(g.min_password_length for g in groups),
+        'trash_retention_days': max(g.trash_retention_days for g in groups),
+    }

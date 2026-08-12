@@ -11,7 +11,7 @@ class FolderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
     def get_entry_count(self, obj):
-        return obj.entries.filter(is_deleted=False).count()
+        return obj.entries.filter(is_deleted=False, is_obsolete=False).count()
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -22,7 +22,7 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'icon', 'color', 'entry_count', 'created_at']
 
     def get_entry_count(self, obj):
-        return obj.entries.filter(is_deleted=False).count()
+        return obj.entries.filter(is_deleted=False, is_obsolete=False).count()
 
 
 class TagSerializer(serializers.ModelSerializer):

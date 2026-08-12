@@ -22,13 +22,17 @@
                         </small>
                     </div>
                     <div class="btn-group">
-                        {% if not user_share or user_share.permission != 'read' %}
+                        {% if not user_share or user_share.permission == 'write' %}
                             <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Editar</a>
                         {% endif %}
                         {% if not user_share or user_share.permission == 'reshare' %}
                             <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info btn-sm"><i class="bi bi-share"></i> Compartir</a>
                         {% endif %}
                         {% if not user_share %}
+                            <form method="post" action="{% url 'passwords:entry_mark_obsolete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Marcar esta contraseña como obsoleta? Se moverá al módulo de obsoletos y no podrá eliminarse sin permiso.')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-warning btn-sm" title="Marcar como obsoleta"><i class="bi bi-shield-exclamation"></i></button>
+                            </form>
                             <button class="btn btn-outline-danger btn-sm" onclick="if(confirm('¿Mover a la papelera?')) location.href='{% url 'passwords:entry_delete' entry.pk %}'">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -111,7 +115,11 @@
     </div>
 
     <div class="col-md-4">
-        {% include 'passwords/includes/totp_section.html' %}
+        {% if is_owner %}
+            {% include 'passwords/includes/totp_section.html' %}
+        {% endif %}
+
+        {% if is_owner or user_share.permission == 'reshare' %}
         <div class="card shadow-sm mb-3">
             <div class="card-header"><h6 class="mb-0"><i class="bi bi-share"></i> Compartido con</h6></div>
             <div class="card-body">
@@ -126,7 +134,7 @@
                                 {% endif %}
                                 <br><small class="text-muted">{{ share.get_permission_display }}</small>
                             </div>
-                            {% if not share.is_revoked %}
+                            {% if is_owner and not share.is_revoked %}
                                 <form method="post" action="{% url 'passwords:revoke_share' share.pk %}">
                                     {% csrf_token %}
                                     <button class="btn btn-sm btn-outline-danger" title="Revocar"><i class="bi bi-x-lg"></i></button>
@@ -139,8 +147,9 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
-        {% if password_history %}
+        {% if is_owner and password_history %}
         <div class="card shadow-sm">
             <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Historial de Contraseñas</h6></div>
             <div class="card-body p-0">
@@ -155,10 +164,12 @@
                             </div>
                             <div class="d-flex gap-1">
                                 <button class="btn btn-sm btn-outline-secondary" title="Copiar" data-clipboard="{{ hist.get_password }}"><i class="bi bi-clipboard"></i></button>
+                                {% if is_owner %}
                                 <form method="post" action="{% url 'passwords:password_history_restore' entry.pk hist.pk %}" class="d-inline" onsubmit="return confirm('¿Restaurar esta versión? La contraseña actual se guardará en el historial.')">
                                     {% csrf_token %}
                                     <button class="btn btn-sm btn-outline-primary" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i></button>
                                 </form>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -184,7 +195,7 @@
     }
     function copyTotp() {
         var code = document.getElementById('totpCode').textContent.trim();
-        navigator.clipboard.writeText(code).then(function() {
+        copyToClipboard(code).then(function() {
             showToast('Código copiado', 'success');
         });
     }
@@ -196,8 +207,20 @@
                 if (data.code) codeEl.textContent = data.code;
             });
     }
+    var totpTicker = null;
+    function startTotpTicker() {
+        if (totpTicker) clearInterval(totpTicker);
+        totpTicker = setInterval(function() {
+            var countdown = document.getElementById('totpCountdown');
+            var progress = document.getElementById('totpProgress');
+            var remaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+            if (countdown) countdown.textContent = 'Actualiza en ' + remaining + 's';
+            if (progress) progress.style.width = Math.round((remaining / 30) * 100) + '%';
+            if (remaining === 0) refreshTotp();
+        }, 1000);
+    }
     {% if entry.has_totp %}
-    setInterval(refreshTotp, 30000);
+    startTotpTicker();
     {% else %}
     document.addEventListener('change', function(e) {
         if (e.target.id !== 'qrImageInput') return;
@@ -281,7 +304,7 @@
             if (newSection) {
                 document.getElementById('totpSection').outerHTML = newSection.outerHTML;
                 showToast('2FA configurado correctamente', 'success');
-                setInterval(refreshTotp, 30000);
+                startTotpTicker();
             }
         });
         form.remove();

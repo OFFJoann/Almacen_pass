@@ -18,7 +18,13 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="refreshTotp()" title="Actualizar"><i class="bi bi-arrow-clockwise"></i></button>
                 </div>
             </div>
-            <small class="text-muted">El código se actualiza cada 30 segundos</small>
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <small class="text-muted" id="totpCountdown">Actualiza en 30s</small>
+                <i class="bi bi-arrow-repeat text-muted"></i>
+            </div>
+            <div class="progress mx-auto mt-1" style="max-width: 220px; height: 4px;">
+                <div class="progress-bar bg-secondary" id="totpProgress" role="progressbar" style="width: 100%"></div>
+            </div>
         {% else %}
             <p class="text-muted mb-3">Añade 2FA escaneando el QR de tu servicio (Cloudflare, Google, GitHub, etc.)</p>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTotpModal">
