@@ -5,16 +5,19 @@ from collections import Counter
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count
+from apps.secrets.models import Secret
 from .models import PasswordEntry, Folder, Category, Tag, Vault, Share, ShareAccessLog, PasswordHistory
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
                      ShareForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage, check_hibp
+from apps.mailer.services import notify_event, domain_from_url
 
 
 @login_required
@@ -25,7 +28,7 @@ def vault_view(request):
     tags = Tag.objects.filter(user=request.user)
 
     entries = PasswordEntry.objects.filter(
-        vault=vault, is_deleted=False
+        vault=vault, is_deleted=False, is_obsolete=False
     ).select_related('folder', 'category').prefetch_related('tags')
 
     folder_id = request.GET.get('folder')
@@ -105,6 +108,22 @@ def entry_create(request):
                 ip_address=request.META.get('REMOTE_ADDR', ''),
             )
 
+            notify_event('password_created', {
+                'usuario': request.user.email,
+                'nombre_servicio': entry.name,
+                'dominio': domain_from_url(entry.url),
+                'url': entry.url or '/',
+                'riesgo_actual': entry.get_sensitivity_display(),
+            })
+            if entry.is_compromised:
+                notify_event('password_compromised', {
+                    'usuario': request.user.email,
+                    'nombre_servicio': entry.name,
+                    'dominio': domain_from_url(entry.url),
+                    'url': entry.url or '/',
+                    'riesgo_actual': entry.get_sensitivity_display(),
+                })
+
             if entry.is_compromised:
                 messages.warning(request, _('Esta contraseña ha sido expuesta en filtraciones de datos. Se recomienda cambiarla.'))
             messages.success(request, _('Contraseña creada exitosamente'))
@@ -129,17 +148,30 @@ def entry_create(request):
 @login_required
 def entry_edit(request, pk):
     entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False).filter(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
             Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False, shares__permission__in=['write', 'reshare']) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False, shares__permission__in=['write', 'reshare'])
+            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
+            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
         ).distinct(),
         pk=pk
     )
 
+    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
+    if not is_owner:
+        can_edit = Share.objects.filter(
+            entry=entry, is_revoked=False, permission='write'
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).filter(
+            Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user)
+        ).exists()
+        if not can_edit:
+            raise PermissionDenied(_('No tienes permiso para editar esta contraseña.'))
+
     if request.method == 'POST':
         form = PasswordEntryForm(request.POST, instance=entry, user=request.user)
         if form.is_valid():
+            old_expires_at = entry.expires_at
             entry = form.save(commit=False)
             changes = []
 
@@ -174,6 +206,8 @@ def entry_edit(request, pk):
                 if 'Notas' in changes:
                     entry.set_notes(new_notes)
                 entry.version += 1
+            if old_expires_at != entry.expires_at:
+                entry.expiry_notified_at = None
             pwd_to_check = new_password if 'Contraseña' in changes else None
             if pwd_to_check:
                 count = check_hibp(pwd_to_check)
@@ -191,6 +225,13 @@ def entry_edit(request, pk):
                 result='success',
                 ip_address=request.META.get('REMOTE_ADDR', ''),
             )
+
+            notify_event('password_modified', {
+                'usuario': request.user.email,
+                'nombre_servicio': entry.name,
+                'dominio': domain_from_url(entry.url),
+                'url': entry.url or '/',
+            })
 
             messages.success(request, _('Contraseña actualizada exitosamente'))
             return redirect('passwords:vault')
@@ -212,7 +253,7 @@ def entry_edit(request, pk):
 @login_required
 def entry_detail(request, pk):
     entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False).filter(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
             Q(vault__user=request.user) |
             Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
             Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
@@ -238,12 +279,21 @@ def entry_detail(request, pk):
             ip_address=request.META.get('REMOTE_ADDR', ''),
         )
 
-    shares = Share.objects.filter(entry=entry)
+    all_shares = Share.objects.filter(entry=entry).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    seen = set()
+    shares = []
+    for s in all_shares:
+        key = ('user', s.shared_with_user_id) if s.shared_with_user else ('group', s.shared_with_group_id)
+        if key not in seen:
+            seen.add(key)
+            shares.append(s)
     password_history = PasswordHistory.objects.filter(entry=entry)[:10]
 
     raw_password = entry.get_password()
     strength = password_strength(raw_password)
     pct = strength_percentage(strength['entropy'])
+
+    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
 
     return render(request, 'passwords/entry_detail.html', {
         'entry': entry,
@@ -252,6 +302,7 @@ def entry_detail(request, pk):
         'notes': entry.get_notes(),
         'shares': shares,
         'user_share': share,
+        'is_owner': is_owner,
         'password_history': password_history,
         'password_strength': strength,
         'strength_pct': pct,
@@ -260,7 +311,7 @@ def entry_detail(request, pk):
 
 @login_required
 def entry_delete(request, pk):
-    entry = get_object_or_404(PasswordEntry, pk=pk, vault__user=request.user)
+    entry = get_object_or_404(PasswordEntry, pk=pk, vault__user=request.user, is_deleted=False, is_obsolete=False)
     if request.method == 'POST':
         entry.is_deleted = True
         entry.deleted_at = timezone.now()
@@ -274,6 +325,12 @@ def entry_delete(request, pk):
             result='success',
             ip_address=request.META.get('REMOTE_ADDR', ''),
         )
+
+        notify_event('password_deleted', {
+            'usuario': request.user.email,
+            'nombre_servicio': entry.name,
+            'dominio': domain_from_url(entry.url),
+        })
 
         messages.success(request, _('Contraseña movida a la papelera'))
     return redirect('passwords:vault')
@@ -291,10 +348,15 @@ def entry_restore(request, pk):
 
 @login_required
 def entry_permanent_delete(request, pk):
+    from apps.users.models import get_user_effective_policy
+    policy = get_user_effective_policy(request.user)
+    retention = policy['trash_retention_days']
+
     entry = get_object_or_404(PasswordEntry, pk=pk, vault__user=request.user, is_deleted=True)
-    if entry.deleted_at and timezone.now() - entry.deleted_at < timedelta(days=7):
-        days_left = 7 - (timezone.now() - entry.deleted_at).days
-        messages.error(request, _(f'Deben pasar 7 días en la papelera antes de eliminar permanentemente. Quedan {days_left} día(s).'))
+    if entry.deleted_at and timezone.now() - entry.deleted_at < timedelta(days=retention):
+        days_left = retention - (timezone.now() - entry.deleted_at).days
+        messages.error(request, _(f'Deben pasar %(days)d días en la papelera antes de eliminar permanentemente. Quedan %(left)s día(s).')
+                         % {'days': retention, 'left': days_left})
         return redirect('passwords:trash')
     entry.delete()
     messages.success(request, _('Contraseña eliminada permanentemente'))
@@ -303,33 +365,98 @@ def entry_permanent_delete(request, pk):
 
 @login_required
 def trash_view(request):
+    from apps.users.models import get_user_effective_policy
+    from apps.secrets.models import Secret
+    policy = get_user_effective_policy(request.user)
+    retention = policy['trash_retention_days']
+
     vault, created = Vault.objects.get_or_create(user=request.user)
     deleted_entries = PasswordEntry.objects.filter(
         vault=vault, is_deleted=True
+    )
+    deleted_secrets = Secret.objects.filter(
+        user=request.user, is_deleted=True
     )
     now = timezone.now()
     for entry in deleted_entries:
         if entry.deleted_at:
             elapsed = now - entry.deleted_at
-            entry.days_remaining = max(0, 7 - elapsed.days)
-            entry.can_permanently_delete = elapsed.days >= 7
+            entry.days_remaining = max(0, retention - elapsed.days)
+            entry.can_permanently_delete = elapsed.days >= retention
         else:
-            entry.days_remaining = 7
+            entry.days_remaining = retention
             entry.can_permanently_delete = False
+    for secret in deleted_secrets:
+        if secret.deleted_at:
+            elapsed = now - secret.deleted_at
+            secret.days_remaining = max(0, retention - elapsed.days)
+            secret.can_permanently_delete = elapsed.days >= retention
+        else:
+            secret.days_remaining = retention
+            secret.can_permanently_delete = False
     return render(request, 'passwords/trash.html', {
         'entries': deleted_entries,
+        'secrets': deleted_secrets,
+        'retention_days': retention,
     })
 
 
 @login_required
 def empty_trash(request):
+    from apps.users.models import get_user_effective_policy
+    from apps.secrets.models import Secret
+    policy = get_user_effective_policy(request.user)
+    retention = policy['trash_retention_days']
+
     vault, created = Vault.objects.get_or_create(user=request.user)
-    cutoff = timezone.now() - timedelta(days=7)
-    deletable = PasswordEntry.objects.filter(vault=vault, is_deleted=True, deleted_at__lte=cutoff)
-    count = deletable.count()
-    deletable.delete()
-    messages.success(request, _(f'Papelera vaciada: {count} contraseña(s) eliminada(s) permanentemente (las más recientes deben esperar 7 días).'))
+    cutoff = timezone.now() - timedelta(days=retention)
+    deletable_entries = PasswordEntry.objects.filter(vault=vault, is_deleted=True, deleted_at__lte=cutoff)
+    deletable_secrets = Secret.objects.filter(user=request.user, is_deleted=True, deleted_at__lte=cutoff)
+    count = deletable_entries.count() + deletable_secrets.count()
+    deletable_entries.delete()
+    deletable_secrets.delete()
+    messages.success(request, _(f'Papelera vaciada: {count} elemento(s) eliminado(s) permanentemente (los más recientes deben esperar %(days)d días).')
+                     % {'days': retention})
     return redirect('passwords:trash')
+
+
+@login_required
+def obsolete_view(request):
+    from apps.secrets.models import Secret
+    vault, created = Vault.objects.get_or_create(user=request.user)
+    entries = PasswordEntry.objects.filter(
+        vault=vault, is_obsolete=True
+    ).select_related('folder', 'category').prefetch_related('tags').order_by('-obsoleted_at')
+    secrets = Secret.objects.filter(
+        user=request.user, is_obsolete=True
+    ).order_by('-obsoleted_at')
+    return render(request, 'passwords/obsolete.html', {
+        'entries': entries,
+        'secrets': secrets,
+    })
+
+
+@login_required
+@require_POST
+def entry_mark_obsolete(request, pk):
+    entry = get_object_or_404(
+        PasswordEntry, pk=pk, vault__user=request.user,
+        is_deleted=False, is_obsolete=False,
+    )
+    entry.is_obsolete = True
+    entry.obsoleted_at = timezone.now()
+    entry.save(update_fields=['is_obsolete', 'obsoleted_at'])
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='PASSWORD_EDITED',
+        details=f'Marked password as obsolete: {entry.name}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(request, _('Contraseña marcada como obsoleta y movida al módulo de obsoletos'))
+    return redirect('passwords:obsolete')
 
 
 @login_required
@@ -342,34 +469,86 @@ def toggle_favorite(request, pk):
 
 @login_required
 def entry_share(request, pk):
-    entry = get_object_or_404(PasswordEntry, pk=pk, vault__user=request.user, is_deleted=False)
+    entry = get_object_or_404(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
+            Q(vault__user=request.user) |
+            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
+            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
+        ).distinct(),
+        pk=pk
+    )
+
+    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
+    if not is_owner:
+        can_reshare = Share.objects.filter(
+            entry=entry, is_revoked=False, permission='reshare'
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).filter(
+            Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user)
+        ).exists()
+        if not can_reshare:
+            raise PermissionDenied(_('No tienes permiso para re-compartir esta contraseña.'))
 
     if request.method == 'POST':
         form = ShareForm(request.POST, user=request.user)
         if form.is_valid():
-            share = form.save(commit=False)
-            share.entry = entry
-            share.shared_by = request.user
-            share.save()
+            target_user = form.cleaned_data.get('shared_with_user')
+            target_group = form.cleaned_data.get('shared_with_group')
+            permission = form.cleaned_data.get('permission')
+            expires_at = form.cleaned_data.get('expires_at')
 
-            from apps.audit.models import AuditLog
-            target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
-            AuditLog.objects.create(
-                user=request.user,
-                action='PASSWORD_SHARED',
-                details=f'Shared password: {entry.name} with {target}',
-                result='success',
-                ip_address=request.META.get('REMOTE_ADDR', ''),
-            )
+            existing = None
+            if target_user:
+                existing = Share.objects.filter(entry=entry, is_revoked=False, shared_with_user=target_user).first()
+            elif target_group:
+                existing = Share.objects.filter(entry=entry, is_revoked=False, shared_with_group=target_group).first()
 
-            messages.success(request, _('Contraseña compartida exitosamente'))
+            if existing:
+                existing.permission = permission
+                existing.expires_at = expires_at
+                existing.save(update_fields=['permission', 'expires_at'])
+                messages.success(request, _('Permiso actualizado exitosamente.'))
+            else:
+                share = form.save(commit=False)
+                share.entry = entry
+                share.shared_by = request.user
+                share.save()
+
+                from apps.audit.models import AuditLog
+                target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='PASSWORD_SHARED',
+                    details=f'Shared password: {entry.name} with {target}',
+                    result='success',
+                    ip_address=request.META.get('REMOTE_ADDR', ''),
+                )
+
+                notify_event('password_shared', {
+                    'compartido_por': request.user.email,
+                    'compartido_con': target,
+                    'nombre_servicio': entry.name,
+                    'url': entry.url or '/',
+                })
+                messages.success(request, _('Contraseña compartida exitosamente'))
+
             return redirect('passwords:detail', pk=entry.pk)
     else:
         form = ShareForm(user=request.user)
 
+    all_existing = Share.objects.filter(entry=entry).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    seen = set()
+    existing_shares = []
+    for s in all_existing:
+        key = ('user', s.shared_with_user_id) if s.shared_with_user else ('group', s.shared_with_group_id)
+        if key not in seen:
+            seen.add(key)
+            existing_shares.append(s)
     return render(request, 'passwords/share_form.html', {
         'form': form,
         'entry': entry,
+        'existing_shares': existing_shares,
     })
 
 
@@ -388,8 +567,26 @@ def revoke_share(request, share_id):
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
 
+    target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
+    notify_event('share_revoked', {
+        'usuario': request.user.email,
+        'compartido_con': target,
+        'nombre_servicio': share.entry.name,
+    })
+
     messages.success(request, _('Acceso revocado'))
     return redirect('passwords:detail', pk=share.entry.pk)
+
+
+@login_required
+@require_POST
+def update_share_permission(request, share_id):
+    share = get_object_or_404(Share, pk=share_id, entry__vault__user=request.user)
+    new_permission = request.POST.get('permission')
+    if new_permission in dict(Share.PERMISSION_CHOICES):
+        share.update_permission(new_permission)
+        messages.success(request, _('Permiso actualizado.'))
+    return redirect(request.META.get('HTTP_REFERER', 'passwords:vault'))
 
 
 @login_required
@@ -504,7 +701,7 @@ def import_passwords(request):
 @login_required
 def export_passwords(request):
     vault, created = Vault.objects.get_or_create(user=request.user)
-    entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False)
+    entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
 
     export_format = request.GET.get('format', 'json')
 
@@ -631,7 +828,7 @@ def tag_create(request):
 @login_required
 def totp_generate(request, pk):
     entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False).filter(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
             Q(vault__user=request.user) |
             Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
             Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
@@ -688,7 +885,7 @@ def totp_remove(request, pk):
 @login_required
 def totp_qr(request, pk):
     entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False).filter(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
             Q(vault__user=request.user) |
             Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
             Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
@@ -710,7 +907,7 @@ def totp_qr(request, pk):
 @login_required
 def totp_current(request, pk):
     entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False).filter(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
             Q(vault__user=request.user) |
             Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
             Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
@@ -719,6 +916,24 @@ def totp_current(request, pk):
     )
     code = entry.get_current_totp()
     return JsonResponse({'code': code, 'has_totp': bool(code)})
+
+
+@login_required
+def entry_copy_data(request, pk):
+    entry = get_object_or_404(
+        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
+            Q(vault__user=request.user) |
+            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
+            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
+        ).distinct(),
+        pk=pk
+    )
+    return JsonResponse({
+        'username': entry.get_username() or '',
+        'password': entry.get_password() or '',
+        'url': entry.url or '',
+        'totp': entry.get_current_totp() or '',
+    })
 
 
 @login_required
@@ -757,10 +972,13 @@ def password_history_restore(request, pk, hist_pk):
 
 @login_required
 def user_dashboard(request):
+    from apps.mailer.tasks import check_expired_passwords
+    check_expired_passwords()
+
     vault, created = Vault.objects.get_or_create(user=request.user)
     now = timezone.now()
 
-    entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False)
+    entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
     total_entries = entries.count()
     expiring_soon = entries.filter(expires_at__lt=now).count()
     entries_expiring_30d = entries.filter(expires_at__gte=now, expires_at__lte=now + timedelta(days=30)).count()
@@ -868,6 +1086,8 @@ def user_dashboard(request):
         robustness_label = 'Muy Débil'
         robustness_color = 'danger'
 
+    secret_count = Secret.objects.filter(user=request.user, is_deleted=False).count()
+
     old_entry = entries.filter(is_deleted=False).order_by('created_at').first()
     new_entry = entries.filter(is_deleted=False).order_by('-created_at').first()
     oldest_password_date = old_entry.created_at if old_entry else None
@@ -902,5 +1122,6 @@ def user_dashboard(request):
         'robustness_label': robustness_label,
         'robustness_color': robustness_color,
         'active_sessions_count': active_sessions_count,
+        'secret_count': secret_count,
     }
     return render(request, 'passwords/user_dashboard.html', context)

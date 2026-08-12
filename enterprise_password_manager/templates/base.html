@@ -33,19 +33,45 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.11/clipboard.min.js"></script>
     {% block extra_js %}{% endblock %}
     <script>
+        function copyToClipboard(text) {
+            return new Promise(function(resolve, reject) {
+                function fallback() {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.top = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    ta.setSelectionRange(0, text.length);
+                    var ok = false;
+                    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+                    document.body.removeChild(ta);
+                    if (ok) { resolve(); } else { reject(new Error('copy failed')); }
+                }
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(resolve, fallback);
+                } else {
+                    fallback();
+                }
+            });
+        }
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof $ !== 'undefined' && $.fn.select2) {
                 $('.select2').select2({ theme: 'bootstrap-5', width: '100%' });
             }
-            var clipboard = new ClipboardJS('[data-clipboard]');
-            clipboard.on('success', function(e) {
-                var btn = e.trigger;
-                var original = btn.innerHTML;
-                btn.innerHTML = '<i class="bi bi-check"></i>';
-                setTimeout(function() { btn.innerHTML = original; }, 2000);
+            document.addEventListener('click', function(e) {
+                var btn = e.target.closest ? e.target.closest('[data-clipboard]') : null;
+                if (!btn) return;
+                copyToClipboard(btn.getAttribute('data-clipboard')).then(function() {
+                    var original = btn.innerHTML;
+                    btn.innerHTML = '<i class="bi bi-check"></i>';
+                    setTimeout(function() { btn.innerHTML = original; }, 2000);
+                }).catch(function() {
+                    showToast('No se pudo copiar al portapapeles', 'danger');
+                });
             });
             htmx.on('showToast', function(evt) {
                 showToast(evt.detail.message, evt.detail.type);

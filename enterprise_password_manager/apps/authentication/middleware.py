@@ -1,5 +1,10 @@
 import re
+from django.contrib.auth import logout
+from django.contrib import messages
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from apps.users.models import ActiveSession
 from apps.authentication.utils import parse_user_agent
@@ -29,15 +34,25 @@ class SessionSecurityMiddleware:
         if request.user.is_authenticated:
             now = timezone.now()
             session_key = request.session.session_key
+
             ActiveSession.objects.filter(
                 user=request.user,
                 expires_at__lt=now
             ).delete()
+
             if session_key:
-                ua = request.META.get('HTTP_USER_AGENT', '')
-                ActiveSession.objects.filter(
-                    user=request.user, user_agent=ua
-                ).exclude(session_key=session_key).delete()
+                is_registered = ActiveSession.objects.filter(
+                    user=request.user,
+                    session_key=session_key,
+                    expires_at__gt=now,
+                ).exists()
+                if not is_registered:
+                    messages.error(
+                        request,
+                        _('Solo se permite una sesión activa. Tu sesión se cerró porque se inició sesión desde otro dispositivo o navegador.'),
+                    )
+                    logout(request)
+                    return HttpResponseRedirect(reverse('authentication:login'))
         return self.get_response(request)
 
 

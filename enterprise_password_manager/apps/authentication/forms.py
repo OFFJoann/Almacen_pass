@@ -95,3 +95,21 @@ class SecurityQuestionForm(forms.Form):
         label=_('Respuesta de Seguridad'),
         widget=forms.TextInput(attrs={'class': 'form-control'})
     )
+
+
+class EmergencyContactForm(forms.Form):
+    emergency_contact_name = forms.CharField(
+        label=_('Nombre del contacto de emergencia'),
+        max_length=255,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Nombre de la persona de confianza',
+        })
+    )
+    emergency_contact_email = forms.EmailField(
+        label=_('Correo del contacto de emergencia'),
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'contacto@example.com',
+        })
+    )

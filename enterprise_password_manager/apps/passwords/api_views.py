@@ -16,7 +16,7 @@ class PasswordEntryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         vault, _ = Vault.objects.get_or_create(user=self.request.user)
-        qs = PasswordEntry.objects.filter(vault=vault, is_deleted=False)
+        qs = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
         folder = self.request.query_params.get('folder')
         category = self.request.query_params.get('category')
         search = self.request.query_params.get('search')

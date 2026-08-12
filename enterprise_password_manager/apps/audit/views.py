@@ -1,17 +1,22 @@
-from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.views.generic import ListView, DetailView
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
+from django.core.exceptions import PermissionDenied
 from .models import AuditLog
 from apps.users.models import LoginHistory, ActiveSession
 
 
-class AuditLogListView(PermissionRequiredMixin, ListView):
+class SuperAdminMixin(UserPassesTestMixin):
+    def test_func(self):
+        return self.request.user.is_authenticated and self.request.user.is_superadmin()
+
+
+class AuditLogListView(SuperAdminMixin, ListView):
     model = AuditLog
     template_name = 'audit/audit_log_list.html'
     context_object_name = 'logs'
-    permission_required = 'audit.view_auditlog'
     paginate_by = 50
 
     def get_queryset(self):
@@ -40,15 +45,16 @@ class AuditLogListView(PermissionRequiredMixin, ListView):
         return context
 
 
-class AuditLogDetailView(PermissionRequiredMixin, DetailView):
+class AuditLogDetailView(SuperAdminMixin, DetailView):
     model = AuditLog
     template_name = 'audit/audit_log_detail.html'
-    permission_required = 'audit.view_auditlog'
     context_object_name = 'log'
 
 
 @login_required
 def user_activity_view(request, user_id):
+    if not request.user.is_superadmin():
+        raise PermissionDenied
     login_history = LoginHistory.objects.filter(user_id=user_id)[:50]
     audit_logs = AuditLog.objects.filter(user_id=user_id)[:50]
     active_sessions = ActiveSession.objects.filter(user_id=user_id)

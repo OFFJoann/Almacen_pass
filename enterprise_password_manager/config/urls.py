@@ -13,6 +13,8 @@ urlpatterns = [
     path('notifications/', include(('apps.notifications.urls', 'notifications'), namespace='notifications')),
     path('sso/', include(('apps.sso.urls', 'sso'), namespace='sso')),
     path('admin-dashboard/', include(('apps.admin_dashboard.urls', 'admin_dashboard'), namespace='admin_dashboard')),
+    path('secrets/', include(('apps.secrets.urls', 'secrets'), namespace='secrets')),
+    path('mailer/', include(('apps.mailer.urls', 'mailer'), namespace='mailer')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/auth/', include('apps.authentication.api_urls')),

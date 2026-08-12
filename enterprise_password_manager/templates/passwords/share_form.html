@@ -10,6 +10,48 @@
             <div class="card-body p-4">
                 <h4 class="card-title mb-2"><i class="bi bi-share"></i> Compartir Contraseña</h4>
                 <p class="text-muted mb-4">Compartiendo: <strong>{{ entry.name }}</strong></p>
+
+                {% if existing_shares %}
+                <div class="mb-4">
+                    <h6 class="mb-2"><i class="bi bi-people"></i> Comparticiones actuales</h6>
+                    <div class="list-group">
+                        {% for share in existing_shares %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <small>
+                                        {% if share.shared_with_user %}
+                                            {{ share.shared_with_user.email }}
+                                        {% elif share.shared_with_group %}
+                                            {{ share.shared_with_group.name }} (Grupo)
+                                        {% endif %}
+                                    </small>
+                                    {% if share.is_expired %}<span class="badge bg-danger ms-1">Expirado</span>{% endif %}
+                                </div>
+                                {% if not share.is_revoked %}
+                                <form method="post" action="{% url 'passwords:revoke_share' share.pk %}" style="display:inline">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Revocar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            <div class="mt-1">
+                                <form method="post" action="{% url 'passwords:update_share_permission' share.pk %}" class="d-flex align-items-center gap-2">
+                                    {% csrf_token %}
+                                    <select name="permission" class="form-select form-select-sm" style="width:auto">
+                                        {% for val, label in share.PERMISSION_CHOICES %}
+                                            <option value="{{ val }}" {% if share.permission == val %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <form method="post" novalidate>
                     {% csrf_token %}
                     <div class="mb-3">
@@ -30,7 +72,7 @@
                         <small class="text-muted d-block">Dejar vacío para sin expiración</small>
                     </div>
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-share"></i> Compartir</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-share"></i> Compartir / Actualizar</button>
                         <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-secondary">Cancelar</a>
                     </div>
                 </form>

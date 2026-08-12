@@ -39,10 +39,24 @@ class PasswordEntryForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
         if user:
             self.fields['folder'].queryset = Folder.objects.filter(user=user)
             self.fields['category'].queryset = Category.objects.filter(user=user)
             self.fields['tags'].queryset = Tag.objects.filter(user=user)
+
+    def clean_password(self):
+        pwd = self.cleaned_data.get('password', '')
+        if pwd and self.user:
+            from apps.users.models import get_user_effective_policy
+            policy = get_user_effective_policy(self.user)
+            min_len = policy['min_password_length']
+            if len(pwd) < min_len:
+                raise forms.ValidationError(
+                    _('La contraseña debe tener al menos %(min_len)s caracteres según la política de tu grupo.')
+                    % {'min_len': min_len}
+                )
+        return pwd
 
 
 class FolderForm(forms.ModelForm):

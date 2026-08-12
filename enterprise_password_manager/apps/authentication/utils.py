@@ -2,8 +2,30 @@ import re
 import hashlib
 import hmac
 import json
+from importlib import import_module
 from urllib.parse import urlencode
 from django.conf import settings
+from django.utils import timezone
+from apps.users.models import ActiveSession
+
+
+def session_is_active(session_key):
+    """True si la clave de sesión aún tiene datos válidos en el backend de sesiones."""
+    engine = import_module(settings.SESSION_ENGINE)
+    store = engine.SessionStore(session_key=session_key)
+    try:
+        return bool(store.load())
+    except Exception:
+        return False
+
+
+def user_has_active_session(user):
+    """True si el usuario tiene al menos una sesión activa no vencida."""
+    now = timezone.now()
+    for s in ActiveSession.objects.filter(user=user).exclude(session_key=''):
+        if s.expires_at and s.expires_at > now and session_is_active(s.session_key):
+            return True
+    return False
 
 
 def parse_user_agent(user_agent):

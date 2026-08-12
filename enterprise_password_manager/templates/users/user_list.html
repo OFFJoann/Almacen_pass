@@ -31,6 +31,7 @@
                     <tr>
                         <th>Correo</th>
                         <th>Nombre</th>
+                        <th>Rol</th>
                         <th>Estado</th>
                         <th>MFA</th>
                         <th>Puntaje</th>
@@ -44,6 +45,15 @@
                             <td><a href="{% url 'users:detail' u.pk %}">{{ u.email }}</a></td>
                             <td>{{ u.full_name }}</td>
                             <td>
+                                {% if u.role == 'superadmin' %}
+                                    <span class="badge bg-dark">SuperAdmin</span>
+                                {% elif u.role == 'admin_usuarios' %}
+                                    <span class="badge bg-info text-dark">Admin Usuarios</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Estándar</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% if u.is_active %}
                                     <span class="badge bg-success">Activo</span>
                                 {% else %}
@@ -51,7 +61,12 @@
                                 {% endif %}
                             </td>
                             <td>{% if u.mfa_enabled %}<i class="bi bi-shield-check text-success"></i>{% else %}<i class="bi bi-shield text-muted"></i>{% endif %}</td>
-                            <td>{{ u.security_score }}%</td>
+                            <td>
+                                {{ u.security_score }}%
+                                {% if u.can_manage_users and not u.has_emergency_contact %}
+                                    <br><span class="badge bg-danger" title="Falta registrar contacto de emergencia">Sin contacto</span>
+                                {% endif %}
+                            </td>
                             <td><small>{{ u.created_at|date:'Y-m-d' }}</small></td>
                             <td>
                                 <div class="btn-group btn-group-sm">
@@ -65,7 +80,7 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="7" class="text-center text-muted">No se encontraron usuarios</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted">No se encontraron usuarios</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
