@@ -37,6 +37,8 @@ class AuditLog(models.Model):
         ('SESSION_REVOKED', _('Sesión revocada')),
         ('EXPORT_VAULT', _('Exportar bóveda')),
         ('IMPORT_VAULT', _('Importar bóveda')),
+        ('DATABASE_BACKUP', _('Backup de base de datos')),
+        ('DATABASE_RESTORE', _('Restauración de base de datos')),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -71,7 +71,7 @@ async function loadPending() {
   const res = await send({ type: 'getPendingSave', tabId: currentTab.id });
   if (res.ok && res.pending) {
     $('pendingCard').hidden = false;
-    $('pendingSite').textContent = res.pending.hostname || '';
+    $('pendingName').value = res.pending.name || res.pending.hostname || '';
     $('pendingUsername').value = res.pending.username || '';
     $('pendingPassword').value = res.pending.password || '';
   } else {
@@ -197,7 +197,7 @@ $('homeBtn').addEventListener('click', async () => {
 // ---------- Guardar ----------
 $('pendingSaveBtn').addEventListener('click', async () => {
   await saveNew({
-    name: $('pendingSite').textContent || 'Acceso',
+    name: $('pendingName').value.trim() || 'Acceso',
     url: currentTab ? currentTab.url : '',
     username: $('pendingUsername').value,
     password: $('pendingPassword').value,

@@ -15,7 +15,7 @@
     </div>
     <ul class="sidebar-nav">
         <li class="nav-item">
-            <a href="{% url 'passwords:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+            <a href="{% url 'passwords:dashboard' %}" class="nav-link {% if request.resolver_match.namespace == 'passwords' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" data-tour="dashboard">
                 <i class="bi bi-speedometer2"></i>
                 <span class="sidebar-text">Mi Panel</span>
             </a>
@@ -27,37 +27,37 @@
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'passwords:share_requests' %}" class="nav-link {% if request.resolver_match.url_name == 'share_requests' %}active{% endif %}">
+            <a href="{% url 'passwords:share_requests' %}" class="nav-link {% if request.resolver_match.url_name == 'share_requests' %}active{% endif %}" data-tour="share-requests">
                 <i class="bi bi-share"></i>
                 <span class="sidebar-text">Re-comparticiones</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'passwords:trash' %}" class="nav-link {% if request.resolver_match.url_name == 'trash' %}active{% endif %}">
+            <a href="{% url 'passwords:trash' %}" class="nav-link {% if request.resolver_match.namespace == 'passwords' and request.resolver_match.url_name == 'trash' %}active{% endif %}" data-tour="trash">
                 <i class="bi bi-trash-fill"></i>
                 <span class="sidebar-text">Papelera</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'passwords:obsolete' %}" class="nav-link {% if request.resolver_match.url_name == 'obsolete' %}active{% endif %}">
+            <a href="{% url 'passwords:obsolete' %}" class="nav-link {% if request.resolver_match.namespace == 'passwords' and request.resolver_match.url_name == 'obsolete' %}active{% endif %}" data-tour="obsolete">
                 <i class="bi bi-shield-exclamation"></i>
                 <span class="sidebar-text">Obsoletos</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'passwords:import' %}" class="nav-link">
+            <a href="{% url 'passwords:import' %}" class="nav-link" data-tour="import">
                 <i class="bi bi-upload"></i>
                 <span class="sidebar-text">Importar</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'secrets:list' %}" class="nav-link {% if request.resolver_match.namespace == 'secrets' %}active{% endif %}">
+            <a href="{% url 'secrets:list' %}" class="nav-link {% if request.resolver_match.namespace == 'secrets' %}active{% endif %}" data-tour="secrets">
                 <i class="bi bi-incognito"></i>
                 <span class="sidebar-text">Secretos</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'audit:my_activity' %}" class="nav-link">
+            <a href="{% url 'audit:my_activity' %}" class="nav-link" data-tour="activity">
                 <i class="bi bi-activity"></i>
                 <span class="sidebar-text">Mi Actividad</span>
             </a>
@@ -94,6 +94,12 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="{% url 'admin_dashboard:backup' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' and request.resolver_match.url_name == 'backup' %}active{% endif %}">
+                        <i class="bi bi-hdd-stack"></i>
+                        <span class="sidebar-text">Copia de Seguridad</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="{% url 'audit:log_list' %}" class="nav-link">
                         <i class="bi bi-journal-text"></i>
                         <span class="sidebar-text">Registros de Auditoría</span>
@@ -115,6 +121,10 @@
         </ul>
     {% endif %}
     <div class="sidebar-footer mt-auto">
+        <a href="{% url 'passwords:vault' %}?tour=1" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+            <i class="bi bi-mortarboard-fill"></i>
+            <span class="sidebar-text">Guía de Bienvenida</span>
+        </a>
         <button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="toggleTheme()">
             <i class="bi bi-moon-fill"></i>
             <span class="sidebar-text">Cambiar Tema</span>

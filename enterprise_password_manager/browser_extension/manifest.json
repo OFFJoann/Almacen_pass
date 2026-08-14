@@ -3,7 +3,7 @@
   "name": "TICOlvidé - Gestor de Contraseñas",
   "version": "1.0.0",
   "description": "Extensión oficial de TICOlvidé. Autocompleta, guarda y genera contraseñas desde tu navegador.",
-  "permissions": ["storage", "tabs", "scripting", "activeTab", "cookies"],
+  "permissions": ["storage", "tabs", "scripting", "activeTab", "cookies", "notifications", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

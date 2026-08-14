@@ -127,6 +127,19 @@ def api_token_logout(request):
     token = getattr(request.auth, 'delete', None)
     if callable(token):
         request.auth.delete()
+    # Cierra también la sesión web con la que se generó el token, si existe.
+    session_key = request.headers.get('X-Session-ID', '')
+    if session_key:
+        from importlib import import_module
+        from django.conf import settings
+        engine = import_module(settings.SESSION_ENGINE)
+        store = engine.SessionStore(session_key)
+        if store.get('_auth_user_id') == str(request.user.pk):
+            store.delete()
+            ActiveSession.objects.filter(user=request.user, session_key=session_key).delete()
+            LoginHistory.objects.filter(
+                user=request.user, session_key=session_key, logout_at__isnull=True
+            ).update(logout_at=timezone.now())
     return Response({'success': True})
 
 

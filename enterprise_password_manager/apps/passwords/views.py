@@ -79,6 +79,7 @@ def vault_view(request):
         'search': search,
         'active_sensitivity': sensitivity,
         'favorite_filter': favorite,
+        'show_onboarding': (not request.user.onboarding_completed) or request.GET.get('tour') == '1',
     })
 
 
@@ -808,6 +809,45 @@ def import_passwords(request):
                         entry.save()
                         imported_count += 1
 
+                elif source == 'roboform':
+                    import json as json_module
+                    decoded = file.read().decode('utf-8-sig')
+                    reader = csv.DictReader(io.StringIO(decoded))
+                    for row in reader:
+                        entry = PasswordEntry(vault=vault)
+                        entry.name = row.get('Name', row.get('name', ''))
+                        entry.url = row.get('Url', row.get('URL', ''))
+                        entry.set_username(row.get('Login', row.get('login', '')))
+                        entry.set_password(row.get('Pwd', row.get('Password', row.get('password', ''))))
+                        entry.set_notes(row.get('Note', row.get('Notes', row.get('notes', ''))))
+
+                        # RfFieldsV2 / Rf_fields: JSON con campos adicionales
+                        # (User ID$, Password$, TOTP Key$, Script$ y campos personalizados).
+                        rf = row.get('RfFieldsV2') or row.get('Rf_fields')
+                        if rf:
+                            try:
+                                rf_data = json_module.loads(rf)
+                                if isinstance(rf_data, dict):
+                                    for k, v in rf_data.items():
+                                        value = ''
+                                        if isinstance(v, (list, tuple)) and len(v) >= 5:
+                                            value = str(v[4] or '')
+                                        elif isinstance(v, str):
+                                            value = v
+                                        key = (k or '').lower()
+                                        if not entry.get_username() and ('user id' in key or key == 'login'):
+                                            entry.set_username(value)
+                                        elif not entry.get_password() and key == 'password$':
+                                            entry.set_password(value)
+                                        elif 'totp' in key and value:
+                                            entry.set_totp_secret(value)
+                            except Exception:
+                                pass
+
+                        if entry.name or entry.get_password() or entry.get_username():
+                            entry.save()
+                            imported_count += 1
+
                 elif source == 'keepass':
                     import xml.etree.ElementTree as ET
                     tree = ET.parse(file)
@@ -1292,3 +1332,12 @@ def user_dashboard(request):
         'emergency_contact_set': emergency_contact_set,
     }
     return render(request, 'passwords/user_dashboard.html', context)
+
+
+@login_required
+def complete_onboarding(request):
+    """Marca la guía de bienvenida como completada para el usuario."""
+    if not request.user.onboarding_completed:
+        request.user.onboarding_completed = True
+        request.user.save(update_fields=['onboarding_completed'])
+    return JsonResponse({'ok': True})
