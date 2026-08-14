@@ -23,6 +23,7 @@ from .forms import (LoginForm, MFAForm, MFASetupForm, PasswordResetRequestForm,
 from .utils import parse_user_agent, get_client_ip, user_has_active_session
 from apps.users.models import User, LoginHistory, ActiveSession, get_user_effective_policy
 from apps.mailer.services import notify_event, send_email, get_smtp_settings
+from rest_framework.authtoken.models import Token
 
 SESSION_TIMEOUT_SECONDS = 3600
 
@@ -214,6 +215,9 @@ def logout_view(request):
     ).update(logout_at=timezone.now())
 
     ActiveSession.objects.filter(user=user, session_key=session_key).delete()
+
+    # Invalida los tokens de la extensión para que el logout web también la cierre.
+    Token.objects.filter(user=user).delete()
 
     logout(request)
     messages.success(request, _('Has cerrado sesión exitosamente'))

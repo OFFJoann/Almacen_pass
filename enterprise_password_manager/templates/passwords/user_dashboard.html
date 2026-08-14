@@ -182,10 +182,12 @@
                 <div class="card-body">
                     {% if duplicate_groups %}
                         {% for group in duplicate_groups %}
-                            <div class="mb-2 p-2 bg-light rounded">
+                            <div class="mb-2 p-2 bg-body-tertiary rounded">
                                 <small class="text-muted">Usada en {{ group|length }} entradas:</small>
                                 {% for entry in group %}
-                                    <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none me-1">{{ entry.name }}</a>
+                                    <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none p-2 me-1">
+                                        <i class="bi bi-files me-1"></i>{{ entry.name }}
+                                    </a>
                                 {% endfor %}
                             </div>
                         {% endfor %}

@@ -37,4 +37,5 @@ urlpatterns = [
     path('entry/<uuid:pk>/totp/current/', views.totp_current, name='totp_current'),
     path('entry/<uuid:pk>/copy-data/', views.entry_copy_data, name='entry_copy_data'),
     path('entry/<uuid:pk>/history/<uuid:hist_pk>/restore/', views.password_history_restore, name='password_history_restore'),
+    path('onboarding/complete/', views.complete_onboarding, name='onboarding_complete'),
 ]

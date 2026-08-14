@@ -32,6 +32,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     emergency_contact_email = models.EmailField(_('correo del contacto de emergencia'), blank=True, default='')
     trusted_devices = models.JSONField(_('dispositivos confiables'), default=list, blank=True)
     preferences = models.JSONField(_('preferencias'), default=dict, blank=True)
+    onboarding_completed = models.BooleanField(
+        _('guía de bienvenida completada'), default=False,
+        help_text=_('Indica si el usuario ya realizó el recorrido guiado de bienvenida.')
+    )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
 
@@ -188,6 +192,25 @@ class ActiveSession(models.Model):
 
     def __str__(self):
         return f'{self.user.email} - {self.ip_address}'
+
+
+class IPGeoCache(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ip_address = models.GenericIPAddressField(_('dirección IP'), unique=True)
+    country_code = models.CharField(_('código de país'), max_length=2, blank=True, default='')
+    country_name = models.CharField(_('país'), max_length=100, blank=True, default='')
+    resolved_at = models.DateTimeField(_('resuelto el'), default=timezone.now)
+
+    class Meta:
+        verbose_name = _('caché geográfica IP')
+        verbose_name_plural = _('caché geográfica IPs')
+        ordering = ['-resolved_at']
+        indexes = [
+            models.Index(fields=['ip_address']),
+        ]
+
+    def __str__(self):
+        return f'{self.ip_address} -> {self.country_name or self.country_code}'
 
 
 def get_user_effective_policy(user):

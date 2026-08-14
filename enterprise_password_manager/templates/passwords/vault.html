@@ -7,19 +7,19 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-key-fill"></i> Mi Bóveda</h4>
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-primary" onclick="location.href='{% url 'passwords:folder_create' %}'">
+        <button class="btn btn-sm btn-outline-primary" data-tour="folder" onclick="location.href='{% url 'passwords:folder_create' %}'">
             <i class="bi bi-folder-plus"></i> Carpeta
         </button>
-        <button class="btn btn-sm btn-outline-primary" onclick="location.href='{% url 'passwords:category_create' %}'">
+        <button class="btn btn-sm btn-outline-primary" data-tour="category" onclick="location.href='{% url 'passwords:category_create' %}'">
             <i class="bi bi-tag"></i> Categoría
         </button>
-        <button class="btn btn-sm btn-outline-primary" onclick="location.href='{% url 'passwords:tag_create' %}'">
+        <button class="btn btn-sm btn-outline-primary" data-tour="tag" onclick="location.href='{% url 'passwords:tag_create' %}'">
             <i class="bi bi-bookmark-plus"></i> Etiqueta
         </button>
-        <a href="{% url 'passwords:export' %}?format=json" class="btn btn-sm btn-outline-secondary">
+        <a href="{% url 'passwords:export' %}?format=json" class="btn btn-sm btn-outline-secondary" data-tour="export">
             <i class="bi bi-download"></i> Exportar
         </a>
-        <a href="{% url 'passwords:entry_create' %}" class="btn btn-sm btn-primary">
+        <a href="{% url 'passwords:entry_create' %}" class="btn btn-sm btn-primary" data-tour="new-entry">
             <i class="bi bi-plus-lg"></i> Nueva Contraseña
         </a>
     </div>
@@ -75,7 +75,7 @@
                         <form method="get" class="d-flex gap-2">
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                <input type="text" name="search" class="form-control" placeholder="Buscar contraseñas..." value="{{ search }}">
+                                <input type="text" name="search" class="form-control" placeholder="Buscar contraseñas..." value="{{ search }}" data-tour="search">
                             </div>
                             <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i></button>
                             {% if search %}
@@ -84,7 +84,7 @@
                         </form>
                     </div>
                     <div class="col-md-4">
-                        <select class="form-select" onchange="if(this.value) window.location.href='{% url 'passwords:vault' %}?sensitivity='+this.value">
+                        <select class="form-select" data-tour="sensitivity" onchange="if(this.value) window.location.href='{% url 'passwords:vault' %}?sensitivity='+this.value">
                             <option value="">Todas las Sensibilidades</option>
                             <option value="low" {% if active_sensitivity == 'low' %}selected{% endif %}>Baja</option>
                             <option value="medium" {% if active_sensitivity == 'medium' %}selected{% endif %}>Media</option>
@@ -95,7 +95,7 @@
                 </div>
 
                 {% if entries %}
-                    <div class="table-responsive">
+                    <div class="table-responsive" data-tour="entry-actions">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -198,7 +198,7 @@
         </div>
 
         {% if shared_entries %}
-            <div class="card shadow-sm mt-4">
+            <div class="card shadow-sm mt-4" data-tour="shared">
                 <div class="card-header">
                     <h6 class="mb-0"><i class="bi bi-people"></i> Compartidas Conmigo</h6>
                 </div>
@@ -269,5 +269,200 @@
             showToast('No se pudo copiar', 'danger');
         }
     }
+
+    {% if show_onboarding %}
+    // ---------- Tour de bienvenida ----------
+    (function () {
+        const ALL_STEPS = [
+            {
+                selector: null,
+                title: '¡Bienvenido a TICOlvidé!',
+                text: 'Te haremos un breve recorrido por tu bóveda para que conozcas para qué sirve cada botón. Pulsa "Siguiente" para avanzar.',
+            },
+            {
+                selector: '[data-tour="dashboard"]',
+                title: 'Mi Panel',
+                text: 'Tu resumen personal de seguridad: fortaleza de tus contraseñas, vencimientos próximos, 2FA, filtraciones y actividad reciente.',
+            },
+            {
+                selector: '[data-tour="share-requests"]',
+                title: 'Re-comparticiones',
+                text: 'Aquí gestionas las solicitudes para volver a compartir accesos contigo y las solicitudes pendientes de otros usuarios.',
+            },
+            {
+                selector: '[data-tour="trash"]',
+                title: 'Papelera',
+                text: 'Los accesos que eliminas van aquí. Puedes restaurarlos o borrarlos definitivamente después del tiempo de retención.',
+            },
+            {
+                selector: '[data-tour="obsolete"]',
+                title: 'Obsoletos',
+                text: 'Contraseñas de origen desconocido que se conservan por seguridad. Aquí puedes revisarlas y decidir si las recuperas o eliminas.',
+            },
+            {
+                selector: '[data-tour="import"]',
+                title: 'Importar',
+                text: 'Trae tus contraseñas desde Bitwarden, KeePass, RoboForm o un archivo CSV.',
+            },
+            {
+                selector: '[data-tour="secrets"]',
+                title: 'Secretos',
+                text: 'Información sensible adicional (tarjetas, códigos, documentos) que no son contraseñas pero quieres mantener seguras.',
+            },
+            {
+                selector: '[data-tour="activity"]',
+                title: 'Mi Actividad',
+                text: 'El registro de tus acciones en la plataforma: inicios de sesión, cambios de contraseña, comparticiones y más.',
+            },
+            {
+                selector: '[data-tour="new-entry"]',
+                title: 'Nueva Contraseña',
+                text: 'Con este botón agregas manualmente una nueva contraseña a tu bóveda: nombre, usuario, contraseña, notas, carpeta y más.',
+            },
+            {
+                selector: '[data-tour="folder"]',
+                title: 'Carpeta',
+                text: 'Crea carpetas para organizar tus accesos (trabajo, personal, finanzas...). Luego podrás filtrar por carpeta en el panel izquierdo.',
+            },
+            {
+                selector: '[data-tour="category"]',
+                title: 'Categoría',
+                text: 'Clasifica tus contraseñas por tipo (Correo, Bancos, Redes sociales...). Sirve como otra forma de organización.',
+            },
+            {
+                selector: '[data-tour="tag"]',
+                title: 'Etiqueta',
+                text: 'Las etiquetas te permiten marcar accesos con palabras clave y encontrarlos más rápido.',
+            },
+            {
+                selector: '[data-tour="export"]',
+                title: 'Exportar',
+                text: 'Descarga tus contraseñas en formato CSV o JSON para hacer una copia de respaldo.',
+            },
+            {
+                selector: '[data-tour="search"]',
+                title: 'Buscar',
+                text: 'Escribe aquí para filtrar tus accesos por nombre o URL al instante.',
+            },
+            {
+                selector: '[data-tour="sensitivity"]',
+                title: 'Sensibilidad',
+                text: 'Filtra tus contraseñas por nivel de sensibilidad: Baja, Media, Alta o Crítica.',
+            },
+            {
+                selector: '[data-tour="entry-actions"]',
+                title: 'Acciones por acceso',
+                text: 'Cada acceso tiene botones para ver, editar, compartir, eliminar o copiar usuario/contraseña/MFA.',
+            },
+            {
+                selector: '[data-tour="shared"]',
+                title: 'Compartidas contigo',
+                text: 'Aquí verás las contraseñas que otros usuarios compartieron contigo.',
+            },
+            {
+                selector: null,
+                title: '¡Listo!',
+                text: 'Ya conoces lo esencial. Si tienes dudas, este recorrido puede repetirse desde el menú. ¡A empezar a guardar contraseñas!',
+            },
+        ];
+
+        // Solo se muestran los pasos cuyo elemento existe en la página.
+        // (Acciones por acceso y Compartidas no se señalan si no hay datos.)
+        const steps = ALL_STEPS.filter(function (s) {
+            return !s.selector || document.querySelector(s.selector);
+        });
+
+        let current = 0;
+        const overlay = document.createElement('div');
+        overlay.className = 'onboarding-backdrop';
+        const highlight = document.createElement('div');
+        highlight.className = 'onboarding-highlight';
+        highlight.style.display = 'none';
+        const card = document.createElement('div');
+        card.className = 'onboarding-card';
+        document.body.appendChild(overlay);
+        document.body.appendChild(highlight);
+        document.body.appendChild(card);
+
+        function csrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.getAttribute('content') : '';
+        }
+
+        function finish() {
+            overlay.remove();
+            highlight.remove();
+            card.remove();
+            fetch('{% url 'passwords:onboarding_complete' %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            }).catch(function () {});
+        }
+
+        function position(target) {
+            const rect = target.getBoundingClientRect();
+            const pad = 8;
+            highlight.style.display = 'block';
+            highlight.style.left = (rect.left - pad) + 'px';
+            highlight.style.top = (rect.top - pad) + 'px';
+            highlight.style.width = (rect.width + pad * 2) + 'px';
+            highlight.style.height = (rect.height + pad * 2) + 'px';
+
+            card.style.left = '50%';
+            card.style.transform = 'translateX(-50%)';
+            const cardTop = rect.bottom + 16;
+            card.style.top = (cardTop + card.offsetHeight + 16 > window.innerHeight
+                ? Math.max(8, rect.top - card.offsetHeight - 16)
+                : cardTop) + 'px';
+        }
+
+        function render() {
+            const step = steps[current];
+            card.querySelector('.tour-step').textContent = 'Paso ' + (current + 1) + ' de ' + steps.length;
+            card.querySelector('h6').textContent = step.title;
+            card.querySelector('p').textContent = step.text;
+
+            const nextBtn = card.querySelector('.onboarding-next');
+            nextBtn.textContent = current === steps.length - 1 ? 'Finalizar' : 'Siguiente';
+
+            const target = step.selector ? document.querySelector(step.selector) : null;
+            if (target) {
+                highlight.style.display = 'block';
+                position(target);
+                target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } else {
+                highlight.style.display = 'none';
+                card.style.left = '50%';
+                card.style.top = '30%';
+                card.style.transform = 'translateX(-50%)';
+            }
+        }
+
+        card.innerHTML =
+            '<div class="tour-step"></div>' +
+            '<h6></h6>' +
+            '<p></p>' +
+            '<div class="onboarding-actions">' +
+            '<button type="button" class="btn btn-sm btn-link onboarding-skip" style="text-decoration:none">Saltar</button>' +
+            '<button type="button" class="btn btn-sm btn-primary onboarding-next">Siguiente</button>' +
+            '</div>';
+
+        card.querySelector('.onboarding-next').addEventListener('click', function () {
+            if (current === steps.length - 1) {
+                finish();
+                return;
+            }
+            current += 1;
+            render();
+        });
+        card.querySelector('.onboarding-skip').addEventListener('click', finish);
+
+        render();
+    })();
+    {% endif %}
 </script>
 {% endblock %}

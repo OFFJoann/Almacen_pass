@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Copia de Seguridad - Administración{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-hdd-stack"></i> Copia de Seguridad</h4>
+    <a href="{% url 'admin_dashboard:dashboard' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver al Panel</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-download"></i> Descargar Backup</h6></div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Genera un archivo JSON con <strong>toda la base de datos</strong>: usuarios, contraseñas (cifradas),
+                    secretos, registros de auditoría, grupos, configuraciones y más, tal cual está la aplicación.
+                </p>
+                <ul class="list-group list-group-flush mb-3">
+                    <li class="list-group-item d-flex justify-content-between"><span>Datos de usuario</span><i class="bi bi-check-circle text-success"></i></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Contraseñas y secretos (cifrados)</span><i class="bi bi-check-circle text-success"></i></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Auditoría y actividad</span><i class="bi bi-check-circle text-success"></i></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Configuración y grupos</span><i class="bi bi-check-circle text-success"></i></li>
+                </ul>
+                <a href="{% url 'admin_dashboard:backup_download' %}" class="btn btn-primary w-100">
+                    <i class="bi bi-download"></i> Descargar backup completo
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100 border-warning">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-upload"></i> Restaurar Backup</h6></div>
+            <div class="card-body">
+                <div class="alert alert-danger d-flex align-items-center" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <div>La restauración <strong>reemplaza por completo</strong> la base de datos actual con el contenido
+                        del backup. Los datos actuales se perderán de forma irreversible.</div>
+                </div>
+                <form method="post" action="{% url 'admin_dashboard:backup_restore' %}" enctype="multipart/form-data"
+                      onsubmit="return confirm('¿Restaurar este backup? Se reemplazarán TODOS los datos actuales de la base de datos. Esta acción no se puede deshacer.')">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="backup-file" class="form-label">Archivo de backup (JSON)</label>
+                        <input type="file" name="backup_file" id="backup-file" class="form-control" accept=".json,application/json" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100">
+                        <i class="bi bi-upload"></i> Restaurar backup
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -48,7 +48,7 @@ async function request(path, { method = 'GET', body = null, auth = true, headers
   const data = text ? JSON.parse(text) : {};
   if (!res.ok) {
     if (res.status === 401 && auth) {
-      await chrome.storage.local.remove(['token', 'email', 'full_name']);
+      await chrome.storage.local.remove(['token', 'email', 'full_name', 'sessionId']);
     }
     const err = new Error(data.error || data.detail || 'Error ' + res.status + ' del servidor');
     err.status = res.status;
@@ -81,6 +81,14 @@ function hostOf(url) {
   }
 }
 
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch (e) {
+    return '';
+  }
+}
+
 function matchesHost(entryUrl, hostname) {
   if (!entryUrl || !hostname) return false;
   const h = hostOf(entryUrl).toLowerCase();
@@ -100,15 +108,23 @@ async function sessionLogin() {
     headers: { 'X-Session-ID': cookie.value },
   });
   if (data.token) {
-    await chrome.storage.local.set({ token: data.token, email: data.email, full_name: data.full_name });
+    await chrome.storage.local.set({
+      token: data.token,
+      email: data.email,
+      full_name: data.full_name,
+      sessionId: cookie.value,
+    });
     return { ok: true, email: data.email };
   }
   return { ok: false };
 }
 
 async function doLogout() {
-  try { await request('/auth/token/logout/', { method: 'POST' }); } catch (e) { /* ignore */ }
-  await chrome.storage.local.remove(['token', 'email', 'full_name']);
+  const s = await chrome.storage.local.get(['sessionId']);
+  const headers = {};
+  if (s.sessionId) headers['X-Session-ID'] = s.sessionId;
+  try { await request('/auth/token/logout/', { method: 'POST', headers }); } catch (e) { /* ignore */ }
+  await chrome.storage.local.remove(['token', 'email', 'full_name', 'sessionId']);
   await chrome.action.setBadgeText({ text: '' });
   return { ok: true };
 }
@@ -123,9 +139,42 @@ async function getStatus() {
     } catch (e) {
       return { ok: true, loggedIn: false, serverError: e.message, serverUrl };
     }
+    return { ok: true, loggedIn: false, serverUrl };
   }
-  return { ok: true, loggedIn: !!s.token, email: s.email, fullName: s.full_name, serverUrl };
+  // Valida que el token siga vigente en el servidor (el logout web lo revoca).
+  try {
+    await request('/auth/me/', { auth: true });
+    return { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl };
+  } catch (e) {
+    if (e.status === 401) {
+      return { ok: true, loggedIn: false, serverUrl };
+    }
+    return { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl, serverError: e.message };
+  }
 }
+
+// Comprueba periódicamente si la sesión web/token sigue vigente para
+// cerrar sesión en la extensión cuando se cierra en la aplicación web.
+async function checkSession() {
+  const s = await chrome.storage.local.get(['token']);
+  if (!s.token) return;
+  try {
+    await request('/auth/me/', { auth: true });
+  } catch (e) {
+    if (e.status === 401) {
+      await doLogout();
+      const tabs = await chrome.tabs.query({ url: '*://*/*' });
+      for (const tab of tabs) {
+        try { await chrome.tabs.sendMessage(tab.id, { type: 'sessionChanged', loggedIn: false }); } catch (e2) { /* ignore */ }
+      }
+    }
+  }
+}
+
+chrome.alarms.create('sessionCheck', { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'sessionCheck') checkSession();
+});
 
 async function getEntries(hostname) {
   const all = await fetchAllEntries();
@@ -233,10 +282,91 @@ async function clearPendingQr() {
 // ---------- Guardado detectado ----------
 async function saveDetected(tabId, data) {
   if (!tabId) return { ok: true };
+
+  // No pedir guardar en la propia bóveda (misma URL/origen que el servidor).
+  const serverUrl = await getServerUrl();
+  let tabUrl = '';
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    tabUrl = tab.url || '';
+  } catch (e) { /* ignore */ }
+  const serverOrigin = originOf(serverUrl);
+  const tabOrigin = originOf(tabUrl);
+  if (serverOrigin && tabOrigin && serverOrigin === tabOrigin) {
+    return { ok: true };
+  }
+
+  // Si ya existe un acceso con la misma URL y el mismo usuario, no preguntar.
+  const username = (data.username || '').trim().toLowerCase();
+  const urlKey = (data.url || '').split('?')[0];
+  if (username && urlKey) {
+    try {
+      const all = await fetchAllEntries();
+      const dup = all.find((e) =>
+        (e.url || '').split('?')[0] === urlKey &&
+        (e.username || '').trim().toLowerCase() === username
+      );
+      if (dup) return { ok: true, skipped: true };
+    } catch (e) { /* si falla la consulta, se sigue preguntando */ }
+  }
+
   await chrome.storage.local.set({ pendingSave: { tabId, ...data } });
   await chrome.action.setBadgeText({ tabId, text: 'G' });
+  await showSaveNotification(tabId, data);
   return { ok: true };
 }
+
+const SAVE_NOTIF_PREFIX = 'ticolvide-save-';
+
+async function showSaveNotification(tabId, data) {
+  try {
+    const notifId = SAVE_NOTIF_PREFIX + tabId;
+    await chrome.notifications.create(notifId, {
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title: 'TICOlvidé',
+      message: '¿Guardar la contraseña de ' + (data.name || data.hostname || 'este sitio') + '?',
+      buttons: [
+        { title: 'Guardar' },
+        { title: 'Descartar' },
+      ],
+      priority: 1,
+      requireInteraction: true,
+    });
+  } catch (e) {
+    console.error('No se pudo mostrar la notificación:', e);
+  }
+}
+
+chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
+  if (!notifId || !notifId.startsWith(SAVE_NOTIF_PREFIX)) return;
+  const tabId = Number(notifId.replace(SAVE_NOTIF_PREFIX, ''));
+  const s = await chrome.storage.local.get(['pendingSave']);
+  const p = s.pendingSave;
+  if (p && p.tabId === tabId) {
+    if (buttonIndex === 0) {
+      // Abre el popup para que el usuario confirme/edite el nombre antes de guardar.
+      try {
+        await chrome.action.openPopup();
+      } catch (e) {
+        // Si no se puede abrir el popup, guarda directamente.
+        try {
+          await saveEntry({
+            name: p.name,
+            url: p.url,
+            username: p.username,
+            password: p.password,
+            notes: p.notes || '',
+          }, p.hostname);
+          await clearPendingSave(tabId);
+        } catch (e2) { /* el error se verá al abrir la extensión */ }
+      }
+    } else {
+      await clearPendingSave(tabId);
+    }
+  }
+  try { await chrome.notifications.clear(notifId); } catch (e) { /* ignore */ }
+});
 
 async function getPendingSave(tabId) {
   const s = await chrome.storage.local.get(['pendingSave']);
@@ -251,6 +381,7 @@ async function clearPendingSave(tabId) {
     await chrome.storage.local.remove(['pendingSave']);
     await chrome.action.setBadgeText({ tabId, text: '' });
   }
+  try { await chrome.notifications.clear(SAVE_NOTIF_PREFIX + tabId); } catch (e) { /* ignore */ }
   return { ok: true };
 }
 

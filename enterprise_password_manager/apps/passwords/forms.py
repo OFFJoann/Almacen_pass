@@ -179,6 +179,7 @@ class ImportForm(forms.Form):
     SOURCE_CHOICES = [
         ('bitwarden', _('Bitwarden')),
         ('keepass', _('KeePass')),
+        ('roboform', _('RoboForm')),
         ('csv', _('CSV')),
     ]
     source = forms.ChoiceField(

@@ -6,6 +6,23 @@
 {% block content %}
 <h4 class="mb-4"><i class="bi bi-speedometer2"></i> Panel de Administración</h4>
 
+<form method="get" class="row g-2 align-items-end mb-4">
+    <div class="col-md-4">
+        <label class="form-label" for="group-filter">Filtrar por grupo</label>
+        <select class="form-select select2" id="group-filter" name="group" onchange="this.form.submit()">
+            <option value="">Todos los usuarios (nivel general)</option>
+            {% for g in groups %}
+                <option value="{{ g.pk }}" {% if selected_group.pk == g.pk %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if selected_group %}
+    <div class="col-md-auto">
+        <a href="{% url 'admin_dashboard:dashboard' %}" class="btn btn-outline-secondary">Limpiar filtro</a>
+    </div>
+    {% endif %}
+</form>
+
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="card border-primary shadow-sm">
@@ -66,36 +83,174 @@
 </div>
 
 <div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-{{ general_risk_color }} shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Riesgo General</h6>
+                        <h2 class="mb-0 text-{{ general_risk_color }}">{{ general_risk }}%</h2>
+                    </div>
+                    <div class="text-{{ general_risk_color }}"><i class="bi bi-shield-exclamation fs-1"></i></div>
+                </div>
+                <span class="badge bg-{{ general_risk_color }}">{{ general_risk_label }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Dark Web</h6>
+                        <h2 class="mb-0 text-danger">{{ darkweb_total }}</h2>
+                    </div>
+                    <div class="text-danger"><i class="bi bi-bug-fill fs-1"></i></div>
+                </div>
+                <small class="text-muted">contraseñas expuestas</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-{{ avg_robustness_color }} shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Robustez Promedio</h6>
+                        <h2 class="mb-0 text-{{ avg_robustness_color }}">{{ avg_robustness }}%</h2>
+                    </div>
+                    <div class="text-{{ avg_robustness_color }}"><i class="bi bi-shield-lock fs-1"></i></div>
+                </div>
+                <span class="badge bg-{{ avg_robustness_color }}">{{ avg_robustness_label }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-secondary shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Intentos de Login</h6>
+                        <h2 class="mb-0">{{ total_failed_logins }}</h2>
+                    </div>
+                    <div class="text-secondary"><i class="bi bi-fingerprint fs-1"></i></div>
+                </div>
+                <small class="text-muted">{{ failed_logins_24h }} fallidos en 24h</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card shadow-sm">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Contraseñas por Sensibilidad</h6></div>
-            <div class="card-body">
-                <canvas id="sensitivityChart" height="200"></canvas>
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-shield-exclamation"></i> Riesgo por Usuario</h6></div>
+            <div class="card-body" style="max-height: 320px; overflow-y: auto;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Riesgo</th>
+                                <th>Robustez</th>
+                                <th>Débiles</th>
+                                <th>DarkWeb</th>
+                                <th>MFA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in user_risks %}
+                                <tr>
+                                    <td><small>{{ r.user.email }}</small></td>
+                                    <td>
+                                        <span class="badge bg-{% if r.total_risk_score >= 80 %}success{% elif r.total_risk_score >= 60 %}warning{% else %}danger{% endif %}">{{ r.total_risk_score }}%</span>
+                                    </td>
+                                    <td><small>{{ r.robustness_pct }}%</small></td>
+                                    <td><small>{{ r.weak_passwords_count }}</small></td>
+                                    <td>
+                                        {% if r.compromised_count > 0 %}<span class="badge bg-danger">{{ r.compromised_count }}</span>{% else %}<small class="text-muted">0</small>{% endif %}
+                                    </td>
+                                    <td>{% if r.user.mfa_enabled %}<i class="bi bi-shield-check text-success"></i>{% else %}<i class="bi bi-shield text-muted"></i>{% endif %}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6" class="text-muted">Sin usuarios en el alcance seleccionado</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card shadow-sm">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-people"></i> Mejores Usuarios</h6></div>
-            <div class="card-body">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bug"></i> Contraseñas en Dark Web</h6></div>
+            <div class="card-body" style="max-height: 320px; overflow-y: auto;">
+                {% if darkweb_total > 0 %}
+                    <h6 class="text-muted">Dueños</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for owner in darkweb_owners %}
+                            <li class="list-group-item d-flex justify-content-between py-1">
+                                <span><small>{{ owner.vault__user__full_name|default:owner.vault__user__email }}</small></span>
+                                <span class="badge bg-danger">{{ owner.count }}</span>
+                            </li>
+                        {% empty %}
+                            <li class="list-group-item text-muted py-1">Sin datos</li>
+                        {% endfor %}
+                    </ul>
+                    <h6 class="text-muted">Últimas expuestas</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for p in darkweb_passwords %}
+                            <li class="list-group-item d-flex justify-content-between py-1">
+                                <span><small>{{ p.name }}</small><br><span class="text-muted">{{ p.vault.user.email }}</span></span>
+                                <span class="text-danger"><small>{{ p.compromised_count }} exp.</small></span>
+                            </li>
+                        {% empty %}
+                            <li class="list-group-item text-muted py-1">Sin datos</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0"><i class="bi bi-check-circle text-success"></i> No se detectaron contraseñas en la dark web</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-fingerprint"></i> Intentos de Inicio de Sesión (últimos 30)</h6></div>
+            <div class="card-body" style="max-height: 320px; overflow-y: auto;">
                 <div class="table-responsive">
-                    <table class="table table-sm">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>Usuario</th>
-                                <th>Contraseñas</th>
-                                <th>MFA</th>
-                                <th>Puntaje</th>
+                                <th>IP</th>
+                                <th>País</th>
+                                <th>Resultado</th>
+                                <th>Fecha</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for u in top_users %}
+                            {% for a in login_attempts %}
                                 <tr>
-                                    <td><small>{{ u.email }}</small></td>
-                                    <td>{{ u.password_count }}</td>
-                                    <td>{% if u.mfa_enabled %}<i class="bi bi-shield-check text-success"></i>{% else %}<i class="bi bi-shield text-muted"></i>{% endif %}</td>
-                                    <td>{{ u.security_score }}%</td>
+                                    <td><small>{{ a.user.email }}</small></td>
+                                    <td><small>{{ a.ip_address }}</small></td>
+                                    <td>
+                                        <small>{{ a.country.country_name|default:'Desconocido' }}</small>
+                                    </td>
+                                    <td>
+                                        {% if a.success %}
+                                            <span class="badge bg-success">Éxito</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Fallido</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ a.login_at|date:'d/m/Y H:i' }}</small></td>
                                 </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-muted">Sin intentos registrados</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -150,32 +305,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var ctx = document.getElementById('sensitivityChart').getContext('2d');
-        var data = {{ passwords_by_sensitivity|safe }};
-        var labels = data.map(function(d) { return d.sensitivity; });
-        var counts = data.map(function(d) { return d.count; });
-        var colors = {low: '#198754', medium: '#ffc107', high: '#dc3545', critical: '#212529'};
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: counts,
-                    backgroundColor: labels.map(function(l) { return colors[l] || '#6c757d'; }),
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' }
-                }
-            }
-        });
-    });
-</script>
 {% endblock %}
