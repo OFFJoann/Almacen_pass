@@ -26,7 +26,9 @@
                             <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Editar</a>
                         {% endif %}
                         {% if not user_share or user_share.permission == 'reshare' %}
-                            <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info btn-sm"><i class="bi bi-share"></i> Compartir</a>
+                            <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info btn-sm">
+                                <i class="bi bi-share"></i> {% if user_share and user_share.permission == 'reshare' %}Solicitar compartir{% else %}Compartir{% endif %}
+                            </a>
                         {% endif %}
                         {% if not user_share %}
                             <form method="post" action="{% url 'passwords:entry_mark_obsolete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Marcar esta contraseña como obsoleta? Se moverá al módulo de obsoletos y no podrá eliminarse sin permiso.')">
@@ -145,6 +147,35 @@
                 {% else %}
                     <p class="text-muted small mb-0">No compartido</p>
                 {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if is_owner and pending_share_requests %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Solicitudes de re-compartición</h6></div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for req in pending_share_requests %}
+                    <li class="list-group-item py-2">
+                        <small class="d-block">
+                            {{ req.requested_by.full_name|default:req.requested_by.email }} quiere compartir con
+                            <strong>{{ req.target_user.email }}</strong>
+                            {% if req.requested_days %}por <strong>{{ req.requested_days }} día{{ req.requested_days|pluralize:'s' }}</strong>{% else %}de forma <strong>ilimitada</strong>{% endif %}
+                        </small>
+                        <div class="d-flex gap-1 mt-1">
+                            <form method="post" action="{% url 'passwords:share_request_approve' req.pk %}" class="d-inline">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-success">Aprobar</button>
+                            </form>
+                            <form method="post" action="{% url 'passwords:share_request_deny' req.pk %}" class="d-inline" onsubmit="return confirm('¿Denegar esta solicitud?')">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger">Denegar</button>
+                            </form>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
         {% endif %}

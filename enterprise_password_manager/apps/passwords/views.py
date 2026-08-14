@@ -8,14 +8,16 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count
 from apps.secrets.models import Secret
-from .models import PasswordEntry, Folder, Category, Tag, Vault, Share, ShareAccessLog, PasswordHistory
+from apps.notifications.models import Notification
+from .models import PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
-                     ShareForm, ImportForm, ExportForm)
+                     ShareForm, ShareRequestForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage, check_hibp
 from apps.mailer.services import notify_event, domain_from_url
 
@@ -57,7 +59,9 @@ def vault_view(request):
 
     shared_with_me = Share.objects.filter(
         Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user),
-        is_revoked=False
+        is_revoked=False,
+        entry__is_deleted=False,
+        entry__is_obsolete=False,
     ).filter(
         Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
     ).select_related('entry', 'shared_by')
@@ -295,6 +299,12 @@ def entry_detail(request, pk):
 
     is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
 
+    pending_share_requests = []
+    if is_owner:
+        pending_share_requests = ShareRequest.objects.filter(
+            entry=entry, status='pending'
+        ).select_related('requested_by', 'target_user')
+
     return render(request, 'passwords/entry_detail.html', {
         'entry': entry,
         'username': entry.get_username(),
@@ -303,6 +313,7 @@ def entry_detail(request, pk):
         'shares': shares,
         'user_share': share,
         'is_owner': is_owner,
+        'pending_share_requests': pending_share_requests,
         'password_history': password_history,
         'password_strength': strength,
         'strength_pct': pct,
@@ -490,6 +501,46 @@ def entry_share(request, pk):
         if not can_reshare:
             raise PermissionDenied(_('No tienes permiso para re-compartir esta contraseña.'))
 
+    if not is_owner:
+        if request.method == 'POST':
+            form = ShareRequestForm(request.POST, user=request.user, entry=entry)
+            if form.is_valid():
+                share_request = ShareRequest.objects.create(
+                    entry=entry,
+                    requested_by=request.user,
+                    target_user=form.cleaned_data['target_user'],
+                    requested_days=form.cleaned_data['requested_days'],
+                )
+                owner = entry.vault.user
+                duration = _('sin expiración') if not share_request.requested_days else f'{share_request.requested_days} día(s)'
+                Notification.objects.create(
+                    user=owner,
+                    title=_('Solicitud de re-compartición'),
+                    message=_('%(requester)s solicita compartir «%(entry)s» con %(target)s (duración: %(duration)s).')
+                             % {'requester': request.user.full_name or request.user.email,
+                                'entry': entry.name,
+                                'target': share_request.target_user.email,
+                                'duration': duration},
+                    notification_type='info',
+                    action_url=reverse('passwords:share_requests'),
+                )
+                from apps.audit.models import AuditLog
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='SHARE_REQUESTED',
+                    details=f'Requested reshare: {entry.name} with {share_request.target_user.email} for {share_request.requested_days} days',
+                    result='success',
+                    ip_address=request.META.get('REMOTE_ADDR', ''),
+                )
+                messages.success(request, _('Se envió la solicitud de re-compartición al dueño del registro. Espera su aprobación.'))
+                return redirect('passwords:detail', pk=entry.pk)
+        else:
+            form = ShareRequestForm(user=request.user, entry=entry)
+        return render(request, 'passwords/share_request_form.html', {
+            'form': form,
+            'entry': entry,
+        })
+
     if request.method == 'POST':
         form = ShareForm(request.POST, user=request.user)
         if form.is_valid():
@@ -587,6 +638,111 @@ def update_share_permission(request, share_id):
         share.update_permission(new_permission)
         messages.success(request, _('Permiso actualizado.'))
     return redirect(request.META.get('HTTP_REFERER', 'passwords:vault'))
+
+
+@login_required
+def share_requests_list(request):
+    requests_qs = ShareRequest.objects.filter(
+        entry__vault__user=request.user
+    ).select_related('entry', 'requested_by', 'target_user')
+    my_requests = ShareRequest.objects.filter(
+        requested_by=request.user
+    ).select_related('entry', 'target_user')
+    return render(request, 'passwords/share_requests.html', {
+        'pending_requests': requests_qs.filter(status='pending'),
+        'responded_requests': requests_qs.exclude(status='pending'),
+        'my_requests': my_requests,
+    })
+
+
+@login_required
+@require_POST
+def share_request_approve(request, request_id):
+    share_request = get_object_or_404(
+        ShareRequest, pk=request_id, entry__vault__user=request.user, status='pending'
+    )
+    entry = share_request.entry
+    target = share_request.target_user
+    now = timezone.now()
+    if share_request.requested_days:
+        expires_at = now + timezone.timedelta(days=share_request.requested_days)
+    else:
+        expires_at = None
+
+    existing = Share.objects.filter(
+        entry=entry, is_revoked=False, shared_with_user=target
+    ).first()
+    if existing:
+        existing.permission = 'read'
+        existing.expires_at = expires_at
+        existing.save(update_fields=['permission', 'expires_at'])
+    else:
+        Share.objects.create(
+            entry=entry,
+            shared_by=request.user,
+            shared_with_user=target,
+            permission='read',
+            expires_at=expires_at,
+        )
+
+    share_request.status = 'approved'
+    share_request.responded_by = request.user
+    share_request.responded_at = now
+    share_request.save(update_fields=['status', 'responded_by', 'responded_at'])
+
+    duration = _('ilimitada') if not share_request.requested_days else f'{share_request.requested_days} día(s)'
+    Notification.objects.create(
+        user=share_request.requested_by,
+        title=_('Re-compartición aprobada'),
+        message=_('Tu solicitud para compartir «%(entry)s» con %(target)s (duración: %(duration)s) fue aprobada.')
+                 % {'entry': entry.name, 'target': target.email, 'duration': duration},
+        notification_type='success',
+        action_url=reverse('passwords:detail', kwargs={'pk': entry.pk}),
+    )
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='SHARE_APPROVED',
+        details=f'Approved reshare request: {entry.name} with {target.email} for {duration}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+
+    messages.success(request, _('Solicitud aprobada y contraseña compartida.'))
+    return redirect('passwords:share_requests')
+
+
+@login_required
+@require_POST
+def share_request_deny(request, request_id):
+    share_request = get_object_or_404(
+        ShareRequest, pk=request_id, entry__vault__user=request.user, status='pending'
+    )
+    share_request.status = 'denied'
+    share_request.responded_by = request.user
+    share_request.responded_at = timezone.now()
+    share_request.save(update_fields=['status', 'responded_by', 'responded_at'])
+
+    Notification.objects.create(
+        user=share_request.requested_by,
+        title=_('Re-compartición denegada'),
+        message=_('Tu solicitud para compartir «%(entry)s» con %(target)s fue denegada.')
+                 % {'entry': share_request.entry.name, 'target': share_request.target_user.email},
+        notification_type='warning',
+    )
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='SHARE_DENIED',
+        details=f'Denied reshare request: {share_request.entry.name} with {share_request.target_user.email}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+
+    messages.success(request, _('Solicitud denegada.'))
+    return redirect('passwords:share_requests')
 
 
 @login_required
@@ -985,6 +1141,8 @@ def user_dashboard(request):
     favorites = entries.filter(is_favorite=True).count()
     entries_with_totp = [e for e in entries if e.has_totp]
     totp_count = len(entries_with_totp)
+    no_totp_entries = [e for e in entries if not e.has_totp]
+    no_totp_count = len(no_totp_entries)
 
     category_counts = entries.values('category__name').annotate(count=Count('id')).order_by('-count')
     sensitivity_counts = entries.values('sensitivity').annotate(count=Count('id')).order_by('sensitivity')
@@ -999,7 +1157,9 @@ def user_dashboard(request):
 
     shared_to_me = Share.objects.filter(
         Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user),
-        is_revoked=False
+        is_revoked=False,
+        entry__is_deleted=False,
+        entry__is_obsolete=False,
     ).distinct().select_related('entry', 'shared_by')[:10]
 
     weak_passwords_count = 0
@@ -1088,6 +1248,9 @@ def user_dashboard(request):
 
     secret_count = Secret.objects.filter(user=request.user, is_deleted=False).count()
 
+    emergency_contact_required = request.user.can_manage_users() and not request.user.has_emergency_contact()
+    emergency_contact_set = request.user.has_emergency_contact()
+
     old_entry = entries.filter(is_deleted=False).order_by('created_at').first()
     new_entry = entries.filter(is_deleted=False).order_by('-created_at').first()
     oldest_password_date = old_entry.created_at if old_entry else None
@@ -1099,6 +1262,8 @@ def user_dashboard(request):
         'entries_expiring_30d': entries_expiring_30d,
         'favorites': favorites,
         'totp_count': totp_count,
+        'no_totp_count': no_totp_count,
+        'no_totp_entries': no_totp_entries,
         'weak_passwords_count': weak_passwords_count,
         'duplicate_groups': duplicate_groups,
         'total_risk_score': round(total_risk_score, 1),
@@ -1123,5 +1288,7 @@ def user_dashboard(request):
         'robustness_color': robustness_color,
         'active_sessions_count': active_sessions_count,
         'secret_count': secret_count,
+        'emergency_contact_required': emergency_contact_required,
+        'emergency_contact_set': emergency_contact_set,
     }
     return render(request, 'passwords/user_dashboard.html', context)

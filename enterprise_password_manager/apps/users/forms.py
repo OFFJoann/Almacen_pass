@@ -124,10 +124,11 @@ class GroupForm(forms.ModelForm):
 
     class Meta:
         model = Group
-        fields = ('name', 'description', 'members', 'min_password_length', 'trash_retention_days')
+        fields = ('name', 'description', 'members', 'min_password_length', 'trash_retention_days', 'session_days')
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'min_password_length': forms.NumberInput(attrs={'class': 'form-control', 'min': 4, 'max': 128}),
             'trash_retention_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 365}),
+            'session_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 365}),
         }

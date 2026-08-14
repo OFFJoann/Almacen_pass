@@ -99,6 +99,10 @@ class Group(models.Model):
         _('días en papelera'), default=7,
         help_text=_('Días que una contraseña debe permanecer en la papelera antes de poder eliminarse permanentemente.')
     )
+    session_days = models.PositiveSmallIntegerField(
+        _('duración de sesión (días)'), default=7,
+        help_text=_('Máximo de días que dura el token de sesión de los miembros de este grupo.')
+    )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
 
@@ -190,8 +194,9 @@ def get_user_effective_policy(user):
     """Return the most restrictive policy across all groups the user belongs to."""
     groups = Group.objects.filter(members=user)
     if not groups:
-        return {'min_password_length': 8, 'trash_retention_days': 7}
+        return {'min_password_length': 8, 'trash_retention_days': 7, 'session_days': 7}
     return {
         'min_password_length': max(g.min_password_length for g in groups),
         'trash_retention_days': max(g.trash_retention_days for g in groups),
+        'session_days': min(g.session_days for g in groups),
     }

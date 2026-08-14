@@ -9,6 +9,16 @@
         <h4 class="mb-0"><i class="bi bi-speedometer2"></i> Mi Panel de Seguridad</h4>
     </div>
 
+    {% if emergency_contact_required %}
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-octagon-fill me-3 fs-4"></i>
+            <div>
+                <strong>Acción obligatoria:</strong> como administrador debes registrar un contacto de emergencia para poder recuperar tu contraseña si la olvidas.
+                <a href="{% url 'authentication:emergency_contact' %}" class="alert-link">Configurar ahora</a>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="row g-3 mb-4">
         <div class="col-md">
             <div class="card shadow-sm border-{{ risk_color }} h-100">
@@ -83,7 +93,7 @@
                     <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Alertas de Seguridad</h6>
                 </div>
                 <div class="card-body">
-                    {% if weak_passwords_count == 0 and not duplicate_groups and expiring_soon == 0 and mfa_enabled and compromised_count == 0 %}
+                    {% if weak_passwords_count == 0 and not duplicate_groups and expiring_soon == 0 and mfa_enabled and compromised_count == 0 and no_totp_count == 0 %}
                         <div class="text-center text-success py-3">
                             <i class="bi bi-check-circle-fill fs-1"></i>
                             <p class="mt-2 mb-0">No hay alertas activas. Buena gestión.</p>
@@ -126,7 +136,40 @@
                                     <span class="badge bg-secondary rounded-pill">Recomendado</span>
                                 </li>
                             {% endif %}
+                            {% if no_totp_count > 0 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-shield-lock text-warning me-2"></i>Entradas sin 2FA configurado</span>
+                                    <span class="badge bg-warning rounded-pill">{{ no_totp_count }}</span>
+                                </li>
+                            {% endif %}
                         </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-shield-lock"></i> Contraseñas sin 2FA</h6>
+                </div>
+                <div class="card-body">
+                    {% if no_totp_entries %}
+                        <div class="mb-2">
+                            <strong>{{ no_totp_count }}</strong> entrada{{ no_totp_count|pluralize:'s' }} no tiene{{ no_totp_count|pluralize:'n' }} un segundo factor configurado:
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for entry in no_totp_entries %}
+                                <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none p-2">
+                                    <i class="bi bi-shield-x me-1"></i>{{ entry.name }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center text-success py-3">
+                            <i class="bi bi-shield-check fs-1"></i>
+                            <p class="mt-2 mb-0">Todas tus entradas tienen 2FA configurado.</p>
+                        </div>
                     {% endif %}
                 </div>
             </div>

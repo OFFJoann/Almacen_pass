@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>TICOlvidé</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- SIN SESIÓN -->
+    <section id="view-login" class="view" hidden>
+      <header class="head">
+        <span class="logo">T</span>
+        <div>
+          <h1>TICOlvidé</h1>
+          <p>Sin sesión activa</p>
+        </div>
+      </header>
+      <p class="hint">Para usar la extensión necesitas una sesión iniciada en la aplicación web. Se abrirá la página de inicio de sesión.</p>
+      <button type="button" class="btn primary" id="loginBtn">Iniciar sesión en la web</button>
+      <p class="muted small center">Después de entrar, vuelve a abrir esta extensión.</p>
+      <p class="error" id="loginError" hidden></p>
+      <button class="link" id="openOptionsBtn">Configurar servidor…</button>
+    </section>
+
+    <!-- MAIN -->
+    <section id="view-main" class="view" hidden>
+      <header class="head">
+        <span class="logo">T</span>
+        <div class="head-user">
+          <h1>TICOlvidé</h1>
+          <p id="userEmail" class="muted"></p>
+        </div>
+        <div class="head-actions">
+          <button class="icon-btn" id="homeBtn" title="Abrir mi bóveda">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg>
+          </button>
+          <button class="icon-btn" id="genBtn" title="Generador de contraseñas">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+          </button>
+          <button class="btn ghost" id="logoutBtn" title="Cerrar sesión">Salir</button>
+        </div>
+      </header>
+      <p class="error" id="mainError" hidden></p>
+
+      <section id="genPanel" hidden>
+        <div class="panel-head">
+          <strong>Generador de contraseñas</strong>
+          <button class="icon-btn" id="genCloseBtn" title="Cerrar">&times;</button>
+        </div>
+        <label>Contraseña generada
+          <div class="row">
+            <input type="text" id="genOutput" class="grow" readonly>
+            <button type="button" class="icon-btn" id="genCopyBtn" title="Copiar">
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+          </div>
+        </label>
+        <div class="gen-opts">
+          <label>Longitud <input type="range" id="genLength" min="8" max="128" value="24"><span id="genLengthVal" class="opt-val">24</span></label>
+          <label class="check"><input type="checkbox" id="genUpper" checked> Mayúsculas (A-Z)</label>
+          <label class="check"><input type="checkbox" id="genLower" checked> Minúsculas (a-z)</label>
+          <label class="check"><input type="checkbox" id="genDigits" checked> Dígitos (0-9)</label>
+          <label class="check"><input type="checkbox" id="genSymbols" checked> Símbolos (!@#$%)</label>
+          <label class="check"><input type="checkbox" id="genExcludeSimilar"> Excluir similares (il1Lo0O)</label>
+          <label class="check"><input type="checkbox" id="genPassphrase"> Usar frase</label>
+          <label id="genWordsWrap">Palabras <input type="range" id="genWords" min="2" max="10" value="4"><span id="genWordsVal" class="opt-val">4</span></label>
+        </div>
+        <button class="btn primary small" id="genRegenBtn">Regenerar</button>
+        <button class="btn ghost small" id="genUseBtn">Usar en nuevo acceso</button>
+        <p class="muted small" id="genEntropy"></p>
+      </section>
+
+      <section id="totpPanel" hidden>
+        <div class="panel-head">
+          <strong>2FA: <span id="totpEntryName"></span></strong>
+          <button class="icon-btn" id="totpCloseBtn" title="Cerrar">&times;</button>
+        </div>
+        <div class="totp-row">
+          <span class="totp-code" id="totpCode"></span>
+          <button class="icon-btn" id="totpCopyBtn" title="Copiar código">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+          </button>
+          <button class="icon-btn" id="totpRefreshBtn" title="Actualizar">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+          </button>
+        </div>
+        <p class="muted small" id="totpStatus"></p>
+        <label>Clave secreta
+          <input type="text" id="totpSecret" placeholder="JBSWY3DPEHPK3PXP">
+        </label>
+        <label>Código de verificación (de tu app autenticadora)
+          <input type="text" id="totpVerifyCode" placeholder="Código de 6 dígitos">
+        </label>
+        <button class="btn primary small" id="totpSaveBtn">Verificar y guardar 2FA</button>
+        <button class="btn ghost small" id="totpRemoveBtn" hidden>Quitar 2FA</button>
+        <button class="btn ghost small" id="totpQrBtn">Seleccionar código QR con el mouse</button>
+        <p class="muted small">Para que el 2FA quede configurado, el código de verificación debe coincidir con el de tu app. Si no coincide, quedará como no configurado.</p>
+      </section>
+
+      <div id="pendingCard" hidden>
+        <div class="pending-head">
+          <strong>Guardar contraseña detectada</strong>
+          <span class="muted" id="pendingSite"></span>
+        </div>
+        <label>Usuario
+          <input type="text" id="pendingUsername">
+        </label>
+        <label>Contraseña
+          <input type="text" id="pendingPassword">
+        </label>
+        <button class="btn primary small" id="pendingSaveBtn">Guardar en TICOlvidé</button>
+        <button class="btn ghost small" id="pendingDiscardBtn">Descartar</button>
+      </div>
+
+      <button class="btn ghost full" id="newToggleBtn">+ Añadir acceso</button>
+      <form id="newForm" hidden>
+        <label>Nombre
+          <input type="text" id="newName">
+        </label>
+        <label>URL
+          <input type="text" id="newUrl">
+        </label>
+        <label>Usuario
+          <input type="text" id="newUsername">
+        </label>
+        <label>Contraseña
+          <div class="row">
+            <input type="text" id="newPassword" class="grow">
+            <button type="button" class="btn ghost" id="generateBtn" title="Generar">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v2H9V7a3 3 0 0 1 3-3z"/></svg>
+            </button>
+          </div>
+        </label>
+        <button type="submit" class="btn primary small">Guardar</button>
+      </form>
+
+      <input type="search" id="searchInput" placeholder="Buscar accesos…" class="search">
+
+      <div id="siteLabel" class="muted small"></div>
+
+      <div class="tabs" id="tabs">
+        <button type="button" class="tab active" data-tab="site">Este sitio</button>
+        <button type="button" class="tab" data-tab="all">Todas</button>
+      </div>
+
+      <div id="entriesList"></div>
+      <div id="noEntries" class="empty" hidden>No hay accesos para este sitio.</div>
+
+      <footer>
+        <button class="link" id="openOptions2Btn">Configurar servidor</button>
+      </footer>
+    </section>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

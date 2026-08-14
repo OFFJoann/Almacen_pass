@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Solicitudes de re-compartición{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-share"></i> Solicitudes de Re-Compartición</h4>
+        <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a la Bóveda</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Pendientes ({{ pending_requests|length }})</h6></div>
+        <div class="card-body p-0">
+            {% if pending_requests %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Registro</th><th>Solicitante</th><th>Compartir con</th><th>Días</th><th>Solicitada</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                    {% for req in pending_requests %}
+                        <tr>
+                            <td><a href="{% url 'passwords:detail' req.entry.pk %}">{{ req.entry.name }}</a></td>
+                            <td>{{ req.requested_by.email }}</td>
+                            <td>{{ req.target_user.email }}</td>
+                            <td>{% if req.requested_days %}{{ req.requested_days }} día{{ req.requested_days|pluralize:'s' }}{% else %}Ilimitada{% endif %}</td>
+                            <td><small>{{ req.created_at|date:'Y-m-d H:i' }}</small></td>
+                            <td>
+                                <form method="post" action="{% url 'passwords:share_request_approve' req.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Aprobar</button>
+                                </form>
+                                <form method="post" action="{% url 'passwords:share_request_deny' req.pk %}" class="d-inline" onsubmit="return confirm('¿Denegar esta solicitud de re-compartición?')">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i> Denegar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3 mb-0">No hay solicitudes pendientes.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Respondidas</h6></div>
+        <div class="card-body p-0">
+            {% if responded_requests %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Registro</th><th>Solicitante</th><th>Compartir con</th><th>Días</th><th>Estado</th><th>Respondida</th></tr></thead>
+                    <tbody>
+                    {% for req in responded_requests %}
+                        <tr>
+                            <td><a href="{% url 'passwords:detail' req.entry.pk %}">{{ req.entry.name }}</a></td>
+                            <td>{{ req.requested_by.email }}</td>
+                            <td>{{ req.target_user.email }}</td>
+                            <td>{% if req.requested_days %}{{ req.requested_days }} día{{ req.requested_days|pluralize:'s' }}{% else %}Ilimitada{% endif %}</td>
+                            <td>
+                                <span class="badge bg-{% if req.status == 'approved' %}success{% elif req.status == 'denied' %}danger{% else %}secondary{% endif %}">
+                                    {{ req.get_status_display }}
+                                </span>
+                            </td>
+                            <td><small>{{ req.responded_at|date:'Y-m-d H:i'|default:'-' }}</small></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3 mb-0">Sin solicitudes respondidas.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-send"></i> Mis solicitudes enviadas</h6></div>
+        <div class="card-body p-0">
+            {% if my_requests %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Registro</th><th>Compartir con</th><th>Días</th><th>Estado</th><th>Solicitada</th><th>Respondida</th></tr></thead>
+                    <tbody>
+                    {% for req in my_requests %}
+                        <tr>
+                            <td>{{ req.entry.name }}</td>
+                            <td>{{ req.target_user.email }}</td>
+                            <td>{% if req.requested_days %}{{ req.requested_days }} día{{ req.requested_days|pluralize:'s' }}{% else %}Ilimitada{% endif %}</td>
+                            <td>
+                                <span class="badge bg-{% if req.status == 'approved' %}success{% elif req.status == 'denied' %}danger{% elif req.status == 'cancelled' %}secondary{% else %}warning{% endif %}">
+                                    {{ req.get_status_display }}
+                                </span>
+                            </td>
+                            <td><small>{{ req.created_at|date:'Y-m-d H:i' }}</small></td>
+                            <td><small>{{ req.responded_at|date:'Y-m-d H:i'|default:'-' }}</small></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3 mb-0">Aún no has enviado solicitudes de re-compartición.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
