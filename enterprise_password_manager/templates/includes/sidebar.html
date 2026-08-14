@@ -27,6 +27,12 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="{% url 'passwords:share_requests' %}" class="nav-link {% if request.resolver_match.url_name == 'share_requests' %}active{% endif %}">
+                <i class="bi bi-share"></i>
+                <span class="sidebar-text">Re-comparticiones</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="{% url 'passwords:trash' %}" class="nav-link {% if request.resolver_match.url_name == 'trash' %}active{% endif %}">
                 <i class="bi bi-trash-fill"></i>
                 <span class="sidebar-text">Papelera</span>

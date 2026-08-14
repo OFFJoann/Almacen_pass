@@ -155,7 +155,7 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ['name', 'created_by', 'member_count', 'created_at']
+    list_display = ['name', 'created_by', 'member_count', 'session_days', 'created_at']
     search_fields = ['name']
     readonly_fields = ['created_at']
 

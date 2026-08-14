@@ -1,6 +1,9 @@
 from django import forms
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from .models import PasswordEntry, Folder, Category, Tag, Share
+from django.db.models import Q
+from apps.users.models import User
+from .models import PasswordEntry, Folder, Category, Tag, Share, ShareRequest
 
 
 class PasswordEntryForm(forms.ModelForm):
@@ -128,6 +131,48 @@ class ShareForm(forms.ModelForm):
         if not user and not group:
             raise forms.ValidationError(_('Selecciona un usuario o grupo para compartir'))
         return cleaned_data
+
+
+class ShareRequestForm(forms.Form):
+    target_user = forms.ModelChoiceField(
+        label=_('Compartir con'),
+        queryset=User.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-control select2'})
+    )
+    requested_days = forms.IntegerField(
+        label=_('Duración (días)'),
+        required=False,
+        min_value=1,
+        max_value=365,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 365}),
+        help_text=_('Días de duración del acceso. Déjalo vacío para una compartición ilimitada.')
+    )
+
+    def __init__(self, *args, user=None, entry=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.entry = entry
+        if user:
+            self.fields['target_user'].queryset = User.objects.filter(is_active=True).exclude(pk=user.pk)
+
+    def clean(self):
+        cleaned = super().clean()
+        target = cleaned.get('target_user')
+        if not target or not self.entry or not self.user:
+            return cleaned
+        has_access = Share.objects.filter(
+            entry=self.entry, is_revoked=False, shared_with_user=target
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).exists()
+        if has_access:
+            self.add_error('target_user', _('Ese usuario ya tiene acceso a esta contraseña.'))
+        pending = ShareRequest.objects.filter(
+            entry=self.entry, requested_by=self.user, target_user=target, status='pending'
+        ).exists()
+        if pending:
+            self.add_error('target_user', _('Ya existe una solicitud pendiente para ese usuario.'))
+        return cleaned
 
 
 class ImportForm(forms.Form):

@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Solicitar re-compartición - {{ entry.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h4 class="card-title mb-2"><i class="bi bi-send"></i> Solicitar Re-Compartición</h4>
+                <p class="text-muted mb-3">Registro: <strong>{{ entry.name }}</strong></p>
+                <div class="alert alert-info py-2">
+                    <small>Con este permiso no compartes el registro directamente. Tu solicitud se enviará al
+                    <strong>dueño del registro</strong>, quien deberá aprobarla para que el usuario elegido acceda.</small>
+                </div>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.target_user.label }}</label>
+                        {{ form.target_user }}
+                        <small class="text-muted d-block">Usuario con el que quieres compartir el registro.</small>
+                        {% if form.target_user.errors %}<div class="text-danger small">{{ form.target_user.errors }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.requested_days.label }}</label>
+                        {{ form.requested_days }}
+                        {% if form.requested_days.help_text %}<small class="text-muted d-block">{{ form.requested_days.help_text }}</small>{% endif %}
+                        {% if form.requested_days.errors %}<div class="text-danger small">{{ form.requested_days.errors }}</div>{% endif %}
+                    </div>
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Enviar solicitud</button>
+                        <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

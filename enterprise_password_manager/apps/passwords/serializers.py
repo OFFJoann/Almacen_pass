@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.db.models import Q
+from django.utils import timezone
 from .models import PasswordEntry, Folder, Category, Tag, Vault, Share
 
 
@@ -34,6 +36,9 @@ class TagSerializer(serializers.ModelSerializer):
 class PasswordEntryListSerializer(serializers.ModelSerializer):
     folder_name = serializers.CharField(source='folder.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
+    shared_by_email = serializers.SerializerMethodField()
+    permission = serializers.SerializerMethodField()
+    has_totp = serializers.SerializerMethodField()
 
     class Meta:
         model = PasswordEntry
@@ -42,7 +47,23 @@ class PasswordEntryListSerializer(serializers.ModelSerializer):
             'sensitivity', 'is_favorite', 'is_deleted',
             'last_accessed', 'access_count', 'version',
             'expires_at', 'created_at', 'updated_at',
+            'shared_by_email', 'permission', 'has_totp',
         ]
+
+    def get_has_totp(self, obj):
+        return obj.has_totp
+
+    def get_shared_by_email(self, obj):
+        share = Share.objects.filter(entry=obj, is_revoked=False).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).first()
+        return share.shared_by.email if share else None
+
+    def get_permission(self, obj):
+        share = Share.objects.filter(entry=obj, is_revoked=False).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).first()
+        return share.permission if share else None
 
 
 class PasswordEntrySerializer(serializers.ModelSerializer):
@@ -50,6 +71,8 @@ class PasswordEntrySerializer(serializers.ModelSerializer):
     password = serializers.SerializerMethodField()
     notes = serializers.SerializerMethodField()
     tags = TagSerializer(many=True, read_only=True)
+    has_totp = serializers.SerializerMethodField()
+    totp = serializers.SerializerMethodField()
 
     class Meta:
         model = PasswordEntry
@@ -59,6 +82,7 @@ class PasswordEntrySerializer(serializers.ModelSerializer):
             'sensitivity', 'is_favorite', 'is_deleted',
             'last_accessed', 'access_count', 'version',
             'expires_at', 'created_at', 'updated_at',
+            'has_totp', 'totp',
         ]
         read_only_fields = ['id', 'last_accessed', 'access_count', 'version', 'created_at', 'updated_at']
 
@@ -70,6 +94,12 @@ class PasswordEntrySerializer(serializers.ModelSerializer):
 
     def get_notes(self, obj):
         return obj.get_notes()
+
+    def get_has_totp(self, obj):
+        return obj.has_totp
+
+    def get_totp(self, obj):
+        return obj.get_current_totp() or ''
 
 
 class ShareSerializer(serializers.ModelSerializer):

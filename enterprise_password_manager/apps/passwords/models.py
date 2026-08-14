@@ -231,7 +231,14 @@ class PasswordEntry(models.Model):
 
     @property
     def has_totp(self):
-        return bool(self.totp_secret_encrypted)
+        if not self.totp_secret_encrypted:
+            return False
+        try:
+            import pyotp
+            pyotp.TOTP(self.get_totp_secret()).now()
+            return True
+        except Exception:
+            return False
 
     def get_totp_uri(self):
         secret = self.get_totp_secret()
@@ -247,8 +254,11 @@ class PasswordEntry(models.Model):
         secret = self.get_totp_secret()
         if not secret:
             return ''
-        import pyotp
-        return pyotp.TOTP(secret).now()
+        try:
+            import pyotp
+            return pyotp.TOTP(secret).now()
+        except Exception:
+            return ''
 
 
 class PasswordHistory(models.Model):
@@ -361,6 +371,54 @@ class ShareAccessLog(models.Model):
 
     def __str__(self):
         return f'{self.user.email} - {self.action} - {self.accessed_at}'
+
+
+class ShareRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', _('Pendiente')),
+        ('approved', _('Aprobada')),
+        ('denied', _('Denegada')),
+        ('cancelled', _('Cancelada')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    entry = models.ForeignKey(
+        PasswordEntry, on_delete=models.CASCADE,
+        related_name='share_requests'
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='share_requests_sent'
+    )
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='share_requests_addressed'
+    )
+    requested_days = models.PositiveIntegerField(
+        _('días solicitados'), null=True, blank=True, default=None,
+        help_text=_('Nulo significa compartición ilimitada.')
+    )
+    status = models.CharField(
+        _('estado'), max_length=20, choices=STATUS_CHOICES, default='pending'
+    )
+    responded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='share_requests_answered'
+    )
+    created_at = models.DateTimeField(_('creado el'), default=timezone.now)
+    responded_at = models.DateTimeField(_('respondido el'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('solicitud de re-compartición')
+        verbose_name_plural = _('solicitudes de re-compartición')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['entry']),
+            models.Index(fields=['requested_by', 'status']),
+        ]
+
+    def __str__(self):
+        return f'{self.requested_by.email} -> {self.target_user.email} ({self.entry.name})'
 
 
 class Attachment(models.Model):

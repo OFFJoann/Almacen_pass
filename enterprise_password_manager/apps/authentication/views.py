@@ -21,8 +21,19 @@ from django.conf import settings
 from .forms import (LoginForm, MFAForm, MFASetupForm, PasswordResetRequestForm,
                     SetPasswordForm, EmergencyContactForm)
 from .utils import parse_user_agent, get_client_ip, user_has_active_session
-from apps.users.models import User, LoginHistory, ActiveSession
+from apps.users.models import User, LoginHistory, ActiveSession, get_user_effective_policy
 from apps.mailer.services import notify_event, send_email, get_smtp_settings
+
+SESSION_TIMEOUT_SECONDS = 3600
+
+
+def session_expiry_for(user, remember_me):
+    """Duración de la sesión según la política del grupo (días) al usar 'recordarme'."""
+    if not remember_me:
+        return SESSION_TIMEOUT_SECONDS
+    policy = get_user_effective_policy(user)
+    days = policy.get('session_days', 7)
+    return min(7 * 86400, days * 86400)
 
 
 @never_cache
@@ -68,9 +79,7 @@ def login_view(request):
                 session_key=session_key or '',
             )
 
-            session_expiry = 3600
-            if form.cleaned_data.get('remember_me', False):
-                session_expiry = 604800
+            session_expiry = session_expiry_for(user, form.cleaned_data.get('remember_me', False))
 
             login(request, user)
             request.session.set_expiry(session_expiry)
@@ -154,7 +163,7 @@ def mfa_verify(request):
                 )
 
                 remember_me = request.session.get('mfa_remember', False)
-                session_expiry = 604800 if remember_me else 3600
+                session_expiry = session_expiry_for(user, remember_me)
 
                 user.backend = 'django.contrib.auth.backends.ModelBackend'
                 login(request, user)
