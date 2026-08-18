@@ -11,4 +11,7 @@ urlpatterns = [
     path('backup/', views.backup_page, name='backup'),
     path('backup/download/', views.backup_download, name='backup_download'),
     path('backup/restore/', views.backup_restore, name='backup_restore'),
+    path('api/', views.api_tokens_view, name='api_tokens'),
+    path('api/<uuid:pk>/revoke/', views.api_token_revoke, name='api_token_revoke'),
+    path('api/docs/', views.api_docs_view, name='api_docs'),
 ]

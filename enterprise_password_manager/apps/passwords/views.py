@@ -22,6 +22,19 @@ from .encryption import generate_password, generate_passphrase, calculate_entrop
 from apps.mailer.services import notify_event, domain_from_url
 
 
+_STRENGTH_COLORS = {
+    'Muy Fuerte': 'dark',
+    'Fuerte': 'success',
+    'Buena': 'info',
+    'Débil': 'warning',
+    'Muy Débil': 'danger',
+}
+
+
+def _strength_color(label):
+    return _STRENGTH_COLORS.get(label, 'secondary')
+
+
 @login_required
 def vault_view(request):
     vault, created = Vault.objects.get_or_create(user=request.user)
@@ -54,8 +67,14 @@ def vault_view(request):
         entries = entries.filter(is_favorite=True)
 
     for entry in entries:
-        raw = entry.get_password()
-        entry.strength_info = password_strength(raw) if raw else None
+        if entry.password_strength:
+            entry.strength_info = {
+                'label': entry.password_strength,
+                'color': _strength_color(entry.password_strength),
+                'entropy': entry.password_entropy,
+            }
+        else:
+            entry.strength_info = None
 
     shared_with_me = Share.objects.filter(
         Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user),
@@ -896,19 +915,40 @@ def import_passwords(request):
 
 @login_required
 def export_passwords(request):
+    from apps.users.models import get_user_effective_policy
+    policy = get_user_effective_policy(request.user)
+    if not policy.get('allow_export', True):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied(
+            _('Tu grupo no permite la exportación de datos. Contacta a un administrador.')
+        )
+
     vault, created = Vault.objects.get_or_create(user=request.user)
     entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
 
     export_format = request.GET.get('format', 'json')
 
+    secrets = Secret.objects.filter(user=request.user, is_deleted=False, is_obsolete=False)
+    secret_rows = []
+    for secret in secrets:
+        data = secret.get_data()
+        secret_rows.append({
+            'type': secret.type,
+            'name': secret.name,
+            'data': data,
+            'notes': secret.get_notes(),
+            'created_at': secret.created_at.isoformat(),
+        })
+
     if export_format == 'csv':
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="passwords_export.csv"'
+        response['Content-Disposition'] = 'attachment; filename="datos_export.csv"'
         writer = csv.writer(response)
-        writer.writerow(['name', 'username', 'password', 'url', 'notes', 'folder', 'category'])
+        writer.writerow(['tipo', 'nombre', 'usuario', 'contraseña', 'url', 'notas', 'carpeta', 'categoría'])
 
         for entry in entries:
             writer.writerow([
+                'contraseña',
                 entry.name,
                 entry.get_username(),
                 entry.get_password(),
@@ -917,12 +957,28 @@ def export_passwords(request):
                 entry.folder.name if entry.folder else '',
                 entry.category.name if entry.category else '',
             ])
+        for secret in secret_rows:
+            data = secret['data']
+            writer.writerow([
+                'secreto',
+                secret['name'],
+                data.get('username', ''),
+                '',
+                data.get('provider', data.get('host', data.get('endpoint_url', ''))),
+                secret['notes'],
+                '',
+                '',
+            ])
 
+        _log_export(request, entries.count(), len(secret_rows))
         return response
     else:
-        data = []
+        data = {
+            'passwords': [],
+            'secrets': secret_rows,
+        }
         for entry in entries:
-            data.append({
+            data['passwords'].append({
                 'name': entry.name,
                 'username': entry.get_username(),
                 'password': entry.get_password(),
@@ -934,12 +990,24 @@ def export_passwords(request):
                 'created_at': entry.created_at.isoformat(),
             })
 
+        _log_export(request, entries.count(), len(secret_rows))
         response = HttpResponse(
-            json.dumps(data, indent=2),
+            json.dumps(data, indent=2, ensure_ascii=False),
             content_type='application/json'
         )
-        response['Content-Disposition'] = 'attachment; filename="passwords_export.json"'
+        response['Content-Disposition'] = 'attachment; filename="datos_export.json"'
         return response
+
+
+def _log_export(request, password_count, secret_count):
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='DATA_EXPORT',
+        details=f'Exported {password_count} passwords and {secret_count} secrets',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
 
 
 @login_required
@@ -1206,27 +1274,21 @@ def user_dashboard(request):
     reused_passwords = []
     duplicate_groups = []
 
-    plaintext_passwords = []
     for e in entries:
-        try:
-            pwd = e.get_password()
-            if pwd:
-                plaintext_passwords.append((e, pwd))
-                strength = password_strength(pwd)
-                if strength['level'] <= 2:
-                    weak_passwords_count += 1
-        except Exception:
-            pass
+        if e.password_strength and e.password_strength in ('Débil', 'Muy Débil'):
+            weak_passwords_count += 1
 
-    password_counter = Counter(pwd for _, pwd in plaintext_passwords)
-    duplicates = {pwd: count for pwd, count in password_counter.items() if count > 1}
+    hmac_counter = Counter(
+        e.password_hmac for e in entries if e.password_hmac
+    )
+    duplicate_hmacs = {h for h, count in hmac_counter.items() if count > 1}
 
-    if duplicates:
-        dup_entries_by_pwd = {}
-        for entry, pwd in plaintext_passwords:
-            if pwd in duplicates:
-                dup_entries_by_pwd.setdefault(pwd, []).append(entry)
-        duplicate_groups = list(dup_entries_by_pwd.values())
+    if duplicate_hmacs:
+        dup_entries_by_hmac = {}
+        for entry in entries:
+            if entry.password_hmac in duplicate_hmacs:
+                dup_entries_by_hmac.setdefault(entry.password_hmac, []).append(entry)
+        duplicate_groups = list(dup_entries_by_hmac.values())
 
     from apps.audit.models import AuditLog
     from apps.users.models import LoginHistory
@@ -1237,16 +1299,17 @@ def user_dashboard(request):
     from apps.users.models import ActiveSession
     active_sessions_count = ActiveSession.objects.filter(user=request.user, expires_at__gt=now).count()
 
-    all_passwords_count = len(plaintext_passwords)
+    all_passwords_count = entries.count()
     avg_entropy = 0
-    if plaintext_passwords:
-        avg_entropy = sum(calculate_entropy(pwd) for _, pwd in plaintext_passwords) / len(plaintext_passwords)
+    entropy_values = [e.password_entropy for e in entries if e.password_entropy > 0]
+    if entropy_values:
+        avg_entropy = sum(entropy_values) / len(entropy_values)
 
     compromised_count = entries.filter(is_compromised=True).count()
 
     score = 100
     score -= min(weak_passwords_count * 20, 50)
-    score -= 25 if duplicates else 0
+    score -= 25 if duplicate_groups else 0
     score -= 25 if not request.user.mfa_enabled else 0
     score -= min(compromised_count * 15, 30)
 

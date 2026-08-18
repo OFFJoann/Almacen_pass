@@ -12,6 +12,13 @@ SECRET_KEY = config('SECRET_KEY', default='insecure-dev-key-change-in-production
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# URL base donde se sirve el servicio FastAPI de reportes (Swagger en /docs).
+API_REPORTS_BASE_URL = config('API_REPORTS_BASE_URL', default='http://127.0.0.1:8001')
+
+# URL del servicio externo de licencias (FastAPI aparte). El panel consume este
+# endpoint para validar empresa + licencia; no se verifica nada localmente.
+LICENSE_API_URL = config('LICENSE_API_URL', default='http://127.0.0.1:8002')
+
 DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -53,6 +60,8 @@ LOCAL_APPS = [
     'apps.admin_dashboard',
     'apps.secrets',
     'apps.mailer',
+    'apps.api_tokens',
+    'apps.licensing',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -93,6 +102,8 @@ TEMPLATES = [
                 'apps.authentication.context_processors.theme',
                 'apps.authentication.context_processors.sso_status',
                 'apps.notifications.context_processors.notification_count',
+                'apps.users.context_processors.export_policy',
+                'apps.licensing.context_processors.license_status',
             ],
         },
     },

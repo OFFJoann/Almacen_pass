@@ -82,6 +82,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.is_staff = self.role in ('superadmin', 'admin_usuarios')
         if self.role == 'superadmin':
             self.is_superuser = True
+        # License enforcement: a new user consumes a seat only when active.
+        # Centralizado aquí para cubrir todos los caminos de creación (create, get_or_create, create_user).
+        if self._state.adding:
+            from apps.licensing.utils import enforce_user_creation
+            enforce_user_creation(1, active=self.is_active)
         super().save(*args, **kwargs)
 
 
@@ -106,6 +111,10 @@ class Group(models.Model):
     session_days = models.PositiveSmallIntegerField(
         _('duración de sesión (días)'), default=7,
         help_text=_('Máximo de días que dura el token de sesión de los miembros de este grupo.')
+    )
+    allow_export = models.BooleanField(
+        _('permitir exportación'), default=True,
+        help_text=_('Si está desmarcado, los miembros del grupo no pueden exportar su bóveda ni sus secretos.')
     )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
@@ -217,9 +226,10 @@ def get_user_effective_policy(user):
     """Return the most restrictive policy across all groups the user belongs to."""
     groups = Group.objects.filter(members=user)
     if not groups:
-        return {'min_password_length': 8, 'trash_retention_days': 7, 'session_days': 7}
+        return {'min_password_length': 8, 'trash_retention_days': 7, 'session_days': 7, 'allow_export': True}
     return {
         'min_password_length': max(g.min_password_length for g in groups),
         'trash_retention_days': max(g.trash_retention_days for g in groups),
         'session_days': min(g.session_days for g in groups),
+        'allow_export': all(g.allow_export for g in groups),
     }

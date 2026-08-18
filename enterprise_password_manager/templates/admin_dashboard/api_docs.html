@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Documentación API - Administrador{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-journal-text"></i> Documentación de la API de Reportes</h4>
+    <a href="{% url 'admin_dashboard:api_tokens' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver a Tokens
+    </a>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    Documentación generada por la aplicación (sin dependencias externas). Para <strong>ejecutar</strong> los
+    endpoints (botón "Probar") necesitas el servicio FastAPI corriendo aparte (Base URL: <code>{{ api_base_url }}</code>).
+    {% if auth_token %}
+        Como eres <strong>superadministrador</strong> con sesión iniciada, ya estás autenticado automáticamente.
+    {% else %}
+        Usa un token válido (créalo en el módulo "API") en el campo de cada endpoint.
+    {% endif %}
+    <hr>
+    <strong>Autenticación:</strong> <code>Authorization: Bearer &lt;token&gt;</code> o <code>?token=&lt;token&gt;</code>.
+    El token debe estar activo, sin caducar y pertenecer a un usuario administrador.
+</div>
+
+{% for op in operations %}
+<div class="card shadow-sm mb-3 op-card">
+    <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge bg-primary">{{ op.method }}</span>
+        <code class="mb-0">{{ op.path }}</code>
+        {% if op.summary %}<span class="text-muted small ms-1">{{ op.summary }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">{{ op.description }}</p>
+
+        <div class="row g-2 align-items-end mb-2">
+            <div class="col-auto">
+                <label class="form-label small fw-bold mb-1">Token</label>
+                <input type="text" class="form-control form-control-sm tok" value="{{ auth_token|default:'' }}" placeholder="Bearer token (solo si aplica)">
+            </div>
+            {% for p in op.parameters %}
+            <div class="col-auto">
+                <label class="form-label small fw-bold mb-1">{{ p.name }}{% if p.required %} *{% endif %}</label>
+                <input type="text" class="form-control form-control-sm param" data-name="{{ p.name }}" data-in="{{ p.in }}" placeholder="{{ p.description }}">
+            </div>
+            {% endfor %}
+            <div class="col-auto">
+                <button class="btn btn-sm btn-primary" onclick="tryIt('{{ op.path }}', this)">
+                    <i class="bi bi-play-fill"></i> Probar
+                </button>
+            </div>
+        </div>
+
+        <p class="fw-bold small mb-1 mt-2">Datos que devuelve:</p>
+        <ul class="small mb-2">
+            {% for r in op.returns %}
+            <li><code>{{ r }}</code></li>
+            {% endfor %}
+        </ul>
+
+        <pre class="bg-body-tertiary p-2 rounded small out" style="max-height:320px;overflow:auto;">Respuesta...</pre>
+    </div>
+</div>
+{% empty %}
+<div class="alert alert-warning">No hay endpoints documentados.</div>
+{% endfor %}
+
+<script>
+    function tryIt(path, btn) {
+        var card = btn.closest('.op-card');
+        var token = card.querySelector('.tok').value.trim();
+        var url = '{{ api_base_url }}' + path;
+        var params = new URLSearchParams();
+        card.querySelectorAll('.param').forEach(function (inp) {
+            var val = inp.value.trim();
+            if (!val) { return; }
+            if (inp.dataset.in === 'path') {
+                url = url.replace('{' + inp.dataset.name + '}', encodeURIComponent(val));
+            } else {
+                params.set(inp.dataset.name, val);
+            }
+        });
+        if (params.toString()) { url += '?' + params.toString(); }
+        var out = card.querySelector('.out');
+        out.textContent = 'Cargando...';
+        var headers = {};
+        if (token) { headers['Authorization'] = 'Bearer ' + token; }
+        fetch(url, {headers: headers})
+            .then(function (r) {
+                return r.json().then(function (d) { return {status: r.status, data: d}; });
+            })
+            .then(function (res) {
+                out.textContent = 'HTTP ' + res.status + '\n\n' + JSON.stringify(res.data, null, 2);
+            })
+            .catch(function (e) {
+                out.textContent = 'Error: ' + e;
+            });
+    }
+</script>
+{% endblock %}

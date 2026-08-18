@@ -16,9 +16,6 @@
         <button class="btn btn-sm btn-outline-primary" data-tour="tag" onclick="location.href='{% url 'passwords:tag_create' %}'">
             <i class="bi bi-bookmark-plus"></i> Etiqueta
         </button>
-        <a href="{% url 'passwords:export' %}?format=json" class="btn btn-sm btn-outline-secondary" data-tour="export">
-            <i class="bi bi-download"></i> Exportar
-        </a>
         <a href="{% url 'passwords:entry_create' %}" class="btn btn-sm btn-primary" data-tour="new-entry">
             <i class="bi bi-plus-lg"></i> Nueva Contraseña
         </a>
@@ -333,11 +330,6 @@
                 selector: '[data-tour="tag"]',
                 title: 'Etiqueta',
                 text: 'Las etiquetas te permiten marcar accesos con palabras clave y encontrarlos más rápido.',
-            },
-            {
-                selector: '[data-tour="export"]',
-                title: 'Exportar',
-                text: 'Descarga tus contraseñas en formato CSV o JSON para hacer una copia de respaldo.',
             },
             {
                 selector: '[data-tour="search"]',

@@ -11,7 +11,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, Avg
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
@@ -20,6 +21,9 @@ from apps.users.models import User, Group, LoginHistory, ActiveSession
 from apps.passwords.models import PasswordEntry, Vault, Share
 from apps.secrets.models import Secret
 from apps.audit.models import AuditLog
+from apps.api_tokens.models import ApiToken
+from apps.admin_dashboard.forms import ApiTokenForm
+from django.conf import settings
 
 
 @login_required
@@ -356,3 +360,242 @@ def backup_restore(request):
     logout(request)
     messages.success(request, _('Backup restaurado correctamente. Inicia sesión de nuevo.'))
     return redirect('authentication:login')
+
+
+@login_required
+def api_tokens_view(request):
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+
+    new_key = None
+    if request.method == 'POST' and request.POST.get('action') == 'create':
+        form = ApiTokenForm(request.POST)
+        if form.is_valid():
+            owner = form.cleaned_data.get('user') or request.user
+            token = ApiToken.objects.create(
+                user=owner,
+                name=form.cleaned_data['name'].strip(),
+                expires_at=form.cleaned_data.get('expires_at'),
+                is_active=True,
+            )
+            new_key = token.key
+            AuditLog.objects.create(
+                user=request.user,
+                action='API_TOKEN_CREATED',
+                details=f'Creó token de API "{token.name}" para {owner.email}',
+                result='success',
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+            )
+            messages.success(request, _('Token de API creado correctamente.'))
+        else:
+            messages.error(request, _('Revisa los datos del formulario.'))
+    else:
+        form = ApiTokenForm()
+
+    tokens = ApiToken.objects.select_related('user').all().order_by('-created_at')
+
+    return render(request, 'admin_dashboard/api_tokens.html', {
+        'form': form,
+        'tokens': tokens,
+        'new_key': new_key,
+        'api_docs_url': getattr(settings, 'API_REPORTS_BASE_URL', 'http://127.0.0.1:8001') + '/docs',
+        'api_openapi_url': getattr(settings, 'API_REPORTS_BASE_URL', 'http://127.0.0.1:8001') + '/openapi.json',
+    })
+
+
+@login_required
+@require_POST
+def api_token_revoke(request, pk):
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+
+    token = get_object_or_404(ApiToken, pk=pk)
+    token.is_active = False
+    token.save(update_fields=['is_active'])
+    AuditLog.objects.create(
+        user=request.user,
+        action='API_TOKEN_REVOKED',
+        details=f'Revocó token de API "{token.name}" de {token.user.email}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(request, _('Token de API revocado.'))
+    return redirect('admin_dashboard:api_tokens')
+
+
+API_ENDPOINT_DOCS = [
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/overview',
+        'summary': 'Resumen general de la empresa',
+        'description': 'Métricas agregadas del estado de la organización: usuarios, contraseñas, secretos, MFA, riesgo, robustez y filtraciones.',
+        'parameters': [
+            {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por un grupo específico.'},
+        ],
+        'returns': [
+            'generated_at: fecha/hora de generación',
+            'scope: "all" o nombre del grupo filtrado',
+            'total_users / active_users / blocked_users',
+            'total_passwords / total_vaults / total_secrets / total_shares / total_groups',
+            'users_with_mfa / mfa_percentage',
+            'recent_logins_24h / failed_logins_24h / active_sessions',
+            'logins_last_7d / logins_last_30d / total_audit_logs',
+            'weak_passwords_count / expired_passwords',
+            'security_score (0-100)',
+            'general_risk / general_risk_label / avg_robustness / avg_robustness_label',
+            'darkweb_total: contraseñas detectadas en filtraciones',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/users',
+        'summary': 'Listado de usuarios con riesgo individual',
+        'description': 'Devuelve los usuarios y, por cada uno, su riesgo calculado (entropía, duplicadas, comprometidas, robustez).',
+        'parameters': [
+            {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por grupo.'},
+            {'name': 'limit', 'in': 'query', 'required': False, 'description': 'Cantidad (1-1000, default 100).'},
+            {'name': 'offset', 'in': 'query', 'required': False, 'description': 'Desplazamiento (default 0).'},
+        ],
+        'returns': [
+            'Arreglo de usuarios con: id, email, full_name, role, is_active, mfa_enabled, security_score',
+            'last_login, created_at, groups (nombres)',
+            'total_entries, weak_passwords_count, compromised_count, has_duplicates',
+            'avg_entropy, total_risk_score, robustness_pct',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/users/{user_id}',
+        'summary': 'Detalle de un usuario',
+        'description': 'Igual que un elemento de /users pero para un usuario concreto.',
+        'parameters': [
+            {'name': 'user_id', 'in': 'path', 'required': True, 'description': 'UUID del usuario.'},
+        ],
+        'returns': [
+            'id, email, full_name, role, is_active, mfa_enabled, security_score',
+            'last_login, created_at, groups',
+            'total_entries, weak_passwords_count, compromised_count, has_duplicates',
+            'avg_entropy, total_risk_score, robustness_pct',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/groups',
+        'summary': 'Grupos y sus políticas',
+        'description': 'Lista los grupos de la empresa con su configuración de políticas.',
+        'parameters': [],
+        'returns': [
+            'Arreglo de grupos con: id, name, description',
+            'min_password_length, trash_retention_days, session_days, allow_export',
+            'member_count',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/risk',
+        'summary': 'Riesgo agregado de la empresa',
+        'description': 'Riesgo general y conteos de usuarios en situación de riesgo.',
+        'parameters': [
+            {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por grupo.'},
+        ],
+        'returns': [
+            'general_risk (0-100) / general_risk_label (Bajo/Medio/Alto/Crítico)',
+            'avg_robustness / avg_robustness_label',
+            'users_at_high_risk, users_with_duplicates, users_with_weak',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/darkweb',
+        'summary': 'Contraseñas en filtraciones (dark web)',
+        'description': 'Contraseñas marcadas como comprometidas, con su propietario.',
+        'parameters': [
+            {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por grupo.'},
+            {'name': 'limit', 'in': 'query', 'required': False, 'description': 'Cantidad (1-500, default 50).'},
+        ],
+        'returns': [
+            'Arreglo con: id, name, owner_email, owner_name',
+            'compromised_count, compromised_checked_at',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/audit',
+        'summary': 'Registro de auditoría',
+        'description': 'Acciones de auditoría de la empresa (quién hizo qué, resultado e IP).',
+        'parameters': [
+            {'name': 'user_id', 'in': 'query', 'required': False, 'description': 'Filtrar por usuario.'},
+            {'name': 'action', 'in': 'query', 'required': False, 'description': 'Tipo de acción, p.ej. PASSWORD_CREATED.'},
+            {'name': 'limit', 'in': 'query', 'required': False, 'description': 'Cantidad (1-1000, default 100).'},
+            {'name': 'offset', 'in': 'query', 'required': False, 'description': 'Desplazamiento (default 0).'},
+        ],
+        'returns': [
+            'Arreglo con: id, user_email, action, details, result',
+            'created_at, ip_address',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/login-attempts',
+        'summary': 'Intentos de inicio de sesión',
+        'description': 'Historial de intentos de login con geolocalización por IP y motivo de fallo.',
+        'parameters': [
+            {'name': 'user_id', 'in': 'query', 'required': False, 'description': 'Filtrar por usuario.'},
+            {'name': 'success', 'in': 'query', 'required': False, 'description': 'true=exitosos, false=fallidos.'},
+            {'name': 'days', 'in': 'query', 'required': False, 'description': 'Ventana en días (1-365, default 30).'},
+            {'name': 'limit', 'in': 'query', 'required': False, 'description': 'Cantidad (1-1000, default 100).'},
+        ],
+        'returns': [
+            'Arreglo con: id, user_email, success, ip_address, country',
+            'login_at, failure_reason',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/storage',
+        'summary': 'Estadísticas de almacenamiento',
+        'description': 'Conteos de contraseñas, bóvedas, secretos, compartidos y grupos.',
+        'parameters': [
+            {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por grupo.'},
+        ],
+        'returns': [
+            'total_passwords, total_vaults, total_secrets, total_shares, total_groups',
+        ],
+    },
+    {
+        'method': 'GET',
+        'path': '/api/v1/admin/obsolete',
+        'summary': 'Registros obsoletos',
+        'description': 'Contraseñas y secretos de origen desconocido marcados como obsoletos.',
+        'parameters': [
+            {'name': 'kind', 'in': 'query', 'required': False, 'description': 'passwords | secrets | all (default all).'},
+            {'name': 'owner', 'in': 'query', 'required': False, 'description': 'Filtrar por email o nombre del propietario.'},
+            {'name': 'limit', 'in': 'query', 'required': False, 'description': 'Cantidad (1-1000, default 200).'},
+        ],
+        'returns': [
+            'Arreglo con: id, kind (password|secret), name, owner_email, obsoleted_at',
+        ],
+    },
+]
+
+
+@login_required
+def api_docs_view(request):
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+
+    auth_token = None
+    if request.user.is_superadmin:
+        auto, _ = ApiToken.objects.get_or_create(
+            user=request.user,
+            name='Sesión automática (documentación)',
+            defaults={'is_active': True},
+        )
+        auth_token = auto.key
+
+    base = getattr(settings, 'API_REPORTS_BASE_URL', 'http://127.0.0.1:8001')
+    return render(request, 'admin_dashboard/api_docs.html', {
+        'api_base_url': base,
+        'auth_token': auth_token,
+        'operations': API_ENDPOINT_DOCS,
+    })

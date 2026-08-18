@@ -81,6 +81,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="{% url 'admin_dashboard:api_tokens' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' and request.resolver_match.url_name == 'api_tokens' %}active{% endif %}">
+                    <i class="bi bi-code-slash"></i>
+                    <span class="sidebar-text">API</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{% url 'users:list' %}" class="nav-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.namespace == 'users' %}active{% endif %}">
                     <i class="bi bi-people-fill"></i>
                     <span class="sidebar-text">Usuarios</span>
@@ -111,12 +117,18 @@
                         <span class="sidebar-text">SSO</span>
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a href="{% url 'mailer:settings' %}" class="nav-link {% if request.resolver_match.namespace == 'mailer' %}active{% endif %}">
-                        <i class="bi bi-envelope-at"></i>
-                        <span class="sidebar-text">SMTP y Notificaciones</span>
-                    </a>
-                </li>
+            <li class="nav-item">
+                <a href="{% url 'mailer:settings' %}" class="nav-link {% if request.resolver_match.namespace == 'mailer' %}active{% endif %}">
+                    <i class="bi bi-envelope-at"></i>
+                    <span class="sidebar-text">SMTP y Notificaciones</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'licensing:license' %}" class="nav-link {% if request.resolver_match.namespace == 'licensing' %}active{% endif %}">
+                    <i class="bi bi-patch-check-fill"></i>
+                    <span class="sidebar-text">Licencia</span>
+                </a>
+            </li>
             {% endif %}
         </ul>
     {% endif %}

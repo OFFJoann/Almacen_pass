@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Licencia - Administrador{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <h4 class="mb-4"><i class="bi bi-patch-check-fill"></i> Licencia del producto</h4>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header"><h6 class="mb-0">Estado actual</h6></div>
+            <div class="card-body">
+                {% if not status.configured %}
+                    <div class="alert alert-warning mb-0">No hay ninguna licencia activada. La creación de usuarios no está limitada hasta que actives una.</div>
+                {% elif status.valid %}
+                    <div class="alert alert-success mb-0">Licencia válida y activa.</div>
+                {% else %}
+                    <div class="alert alert-danger mb-0">Licencia inválida: {{ status.error }}</div>
+                {% endif %}
+
+                <table class="table table-sm mt-3 mb-0">
+                    <tbody>
+                        <tr><th class="w-50">Empresa</th><td>{{ status.company|default:'—' }}</td></tr>
+                        <tr><th>Máximo de usuarios</th><td>{{ status.max_users|default:'—' }}</td></tr>
+                        <tr><th>Usuarios activos</th><td>{{ status.used }}</td></tr>
+                        <tr><th>Disponibles</th><td>{{ status.remaining|default:'—' }}</td></tr>
+                        <tr><th>Caducidad</th><td>{{ status.expires_at|default:'Nunca' }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Activar / renovar licencia</h6></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Empresa</label>
+                        <input type="text" name="company" class="form-control" value="{{ company }}" placeholder="Ej. Acme SAS">
+                        <div class="form-text">Nombre de la empresa tal como aparece en el registro del proveedor.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">URL de la API de licencias</label>
+                        <input type="url" name="api_url" class="form-control" value="{{ api_url }}" placeholder="https://licencias.midominio.com">
+                        <div class="form-text">Donde está desplegado tu servicio de licencias. Si lo dejas vacío usa el valor por defecto del servidor.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Clave de licencia</label>
+                        <textarea name="license_key" class="form-control font-monospace" rows="3" placeholder="Pega aquí la clave de licencia proporcionada por el proveedor"></textarea>
+                        <div class="form-text">Se valida contra el servicio externo de licencias (empresa + clave).</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-patch-check"></i> Activar licencia</button>
+                    {% if status.configured %}
+                    <button type="submit" name="action" value="revalidate" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-repeat"></i> Revalidar
+                    </button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-fingerprint"></i> Identificador de instalación</h6></div>
+            <div class="card-body">
+                <p class="text-muted small">Comparte este UUID con el proveedor si tu licencia está vinculada a esta instalación.</p>
+                <code class="d-block bg-body-tertiary p-2 rounded small">{{ installation_id }}</code>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

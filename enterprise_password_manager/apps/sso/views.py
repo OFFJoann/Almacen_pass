@@ -192,13 +192,20 @@ def sso_callback(request):
             messages.error(request, _('No se pudo obtener el correo de Microsoft'))
             return redirect('authentication:login')
 
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'full_name': name,
-                'is_active': True,
-            }
-        )
+        try:
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    'full_name': name,
+                    'is_active': True,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            from apps.licensing.exceptions import LicenseError
+            if isinstance(exc, LicenseError):
+                messages.error(request, _('No se pudo crear tu usuario: se alcanzó el límite de la licencia.'))
+                return redirect('authentication:login')
+            raise
 
         if not user.is_active:
             messages.error(request, _('Tu cuenta ha sido deshabilitada'))

@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}Tokens de API - Administrador{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <h4 class="mb-4"><i class="bi bi-code-slash"></i> Tokens de API</h4>
+
+        {% if new_key %}
+        <div class="alert alert-success">
+            <h6 class="alert-heading"><i class="bi bi-key-fill"></i> Token generado</h6>
+            <p class="mb-1">Copia este token ahora; no se volverá a mostrar completo:</p>
+            <div class="input-group">
+                <input type="text" class="form-control font-monospace" value="{{ new_key }}" id="newToken" readonly>
+                <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('newToken').value)">
+                    <i class="bi bi-clipboard"></i> Copiar
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header"><h6 class="mb-0">Crear nuevo token</h6></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.name.label }}</label>
+                        {{ form.name }}
+                        <div class="form-text">{{ form.name.help_text }}</div>
+                        {{ form.name.errors }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.user.label }}</label>
+                        {{ form.user }}
+                        <div class="form-text">{{ form.user.help_text }}</div>
+                        {{ form.user.errors }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.expires_at.label }}</label>
+                        {{ form.expires_at }}
+                        <div class="form-text">{{ form.expires_at.help_text }}</div>
+                        {{ form.expires_at.errors }}
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Crear token</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Tokens existentes</h6></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Usuario</th>
+                                <th>Creado</th>
+                                <th>Caduca</th>
+                                <th>Último uso</th>
+                                <th>Estado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in tokens %}
+                            <tr>
+                                <td>{{ t.name }}</td>
+                                <td>{{ t.user.email }}</td>
+                                <td><small>{{ t.created_at|date:"Y-m-d H:i" }}</small></td>
+                                <td>
+                                    {% if t.expires_at %}
+                                        <small>{{ t.expires_at|date:"Y-m-d H:i" }}</small>
+                                        {% if t.is_expired %}<span class="badge bg-danger">caducado</span>{% endif %}
+                                    {% else %}<small class="text-muted">nunca</small>{% endif %}
+                                </td>
+                                <td><small>{{ t.last_used_at|date:"Y-m-d H:i"|default:"-" }}</small></td>
+                                <td>
+                                    {% if t.is_active %}<span class="badge bg-success">activo</span>
+                                    {% else %}<span class="badge bg-secondary">inactivo</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if t.is_active %}
+                                    <form method="post" action="{% url 'admin_dashboard:api_token_revoke' t.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Revocar este token?')">
+                                            <i class="bi bi-x-circle"></i> Revocar
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" class="text-center text-muted py-3">No hay tokens creados.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-book"></i> Documentación</h6></div>
+            <div class="card-body">
+                <p class="text-muted">La API de reportes expone los datos del panel para informes automatizados.</p>
+                <a href="{% url 'admin_dashboard:api_docs' %}" class="btn btn-primary w-100 mb-2">
+                    <i class="bi bi-journal-text"></i> Documentación
+                </a>
+                <hr>
+                <p class="small text-muted mb-1">Uso:</p>
+                <pre class="bg-body-tertiary p-2 rounded small">Authorization: Bearer &lt;token&gt;</pre>
+                <p class="small text-muted">O bien <code>?token=&lt;token&gt;</code>.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

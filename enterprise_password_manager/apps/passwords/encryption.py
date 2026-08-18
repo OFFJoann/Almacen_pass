@@ -1,11 +1,36 @@
 import os
 import base64
 import hashlib
+import hmac
 import requests
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from django.conf import settings
+
+
+_PASSWORD_HMAC_KEY = None
+
+
+def _password_hmac_key() -> bytes:
+    global _PASSWORD_HMAC_KEY
+    if _PASSWORD_HMAC_KEY is None:
+        _PASSWORD_HMAC_KEY = hashlib.sha256(
+            b'tico-password-hmac-v1' + settings.SECRET_KEY.encode('utf-8')
+        ).digest()
+    return _PASSWORD_HMAC_KEY
+
+
+def password_hmac(plaintext: str) -> str:
+    """HMAC-SHA256 determinista de la contraseña (clave secreta del servidor).
+
+    Permite detectar contraseñas reutilizadas entre entradas sin descifrar
+    todas las contraseñas en cada carga. No permite reconstruir la contraseña
+    y, sin la SECRET_KEY, no es verificable por un atacante que solo tenga la BD.
+    """
+    return hmac.new(
+        _password_hmac_key(), plaintext.encode('utf-8'), hashlib.sha256
+    ).hexdigest()
 
 
 def derive_key(master_key: bytes, salt: bytes) -> bytes:
@@ -53,6 +78,42 @@ def encrypt_field(plaintext: str) -> dict:
 
 def decrypt_field(ciphertext: str, nonce: str, salt: str) -> str:
     return decrypt_data(ciphertext, nonce, salt)
+
+
+# Campos de baja sensibilidad (usuario, notas) usan AES-GCM con una clave fija
+# derivada del SECRET_KEY (sin Argon2 por campo). Siguen cifrados en reposo, pero
+# su descifrado es instantáneo y evita el coste de Argon2 al listar la bóveda.
+_FAST_KEY = None
+
+
+def _fast_aes_key() -> bytes:
+    global _FAST_KEY
+    if _FAST_KEY is None:
+        _FAST_KEY = AESGCM(
+            hashlib.sha256(b'tico-fast-field-v1' + settings.SECRET_KEY.encode('utf-8')).digest()
+        )
+    return _FAST_KEY
+
+
+def encrypt_field_fast(plaintext: str) -> dict:
+    aesgcm = _fast_aes_key()
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode('utf-8'), None)
+    return {
+        'ciphertext': base64.b64encode(ciphertext).decode('utf-8'),
+        'nonce': base64.b64encode(nonce).decode('utf-8'),
+        'salt': '',
+    }
+
+
+def decrypt_field_fast(ciphertext: str, nonce: str) -> str:
+    aesgcm = _fast_aes_key()
+    plaintext = aesgcm.decrypt(
+        base64.b64decode(nonce),
+        base64.b64decode(ciphertext),
+        None,
+    )
+    return plaintext.decode('utf-8')
 
 
 def generate_password(length=20, use_upper=True, use_lower=True, use_digits=True,
