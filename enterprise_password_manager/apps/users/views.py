@@ -57,6 +57,10 @@ class UserCreateView(AdminUsersMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
+        from apps.licensing.utils import can_create_users, license_block_reason
+        if not can_create_users(1):
+            messages.error(self.request, license_block_reason())
+            return self.form_invalid(form)
         response = super().form_valid(form)
         notify_event('user_created', {
             'usuario': form.instance.email,
@@ -148,6 +152,11 @@ class UserDetailView(AdminUsersMixin, DetailView):
 def user_toggle_active(request, pk):
     user = get_object_or_404(User, pk=pk)
     if request.user.can_manage_users():
+        if not user.is_active:
+            from apps.licensing.utils import can_create_users, license_block_reason
+            if not can_create_users(1):
+                messages.error(request, license_block_reason())
+                return redirect('users:list')
         user.is_active = not user.is_active
         user.save()
         status = 'enabled' if user.is_active else 'disabled'

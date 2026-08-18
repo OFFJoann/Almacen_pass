@@ -14,6 +14,7 @@
                 <p class="mb-1"><small>Longitud mínima de contraseña: <strong>{{ group_obj.min_password_length }}</strong></small></p>
                 <p class="mb-1"><small>Días en papelera: <strong>{{ group_obj.trash_retention_days }}</strong></small></p>
                 <p class="mb-1"><small>Duración de sesión: <strong>{{ group_obj.session_days }} día{{ group_obj.session_days|pluralize:'s' }}</strong></small></p>
+                <p class="mb-1"><small>Permitir exportación: <strong>{% if group_obj.allow_export %}Sí{% else %}No{% endif %}</strong></small></p>
                 <div class="d-flex gap-2 mt-3">
                     <a href="{% url 'users:group_edit' group_obj.pk %}" class="btn btn-sm btn-primary">Editar</a>
                     <a href="{% url 'users:group_delete' group_obj.pk %}" class="btn btn-sm btn-danger">Eliminar</a>

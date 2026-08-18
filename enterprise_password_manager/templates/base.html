@@ -20,6 +20,17 @@
             {% include 'includes/navbar.html' %}
             <div class="container-fluid p-4">
                 {% include 'includes/messages.html' %}
+                {% if license_status.configured and not license_status.valid %}
+                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+                    <i class="bi bi-patch-exclamation"></i>
+                    <div><strong>Licencia inválida:</strong> {{ license_status.error }} La creación de usuarios está bloqueada hasta activar una licencia válida.</div>
+                </div>
+                {% elif license_status.configured and license_status.valid and license_status.remaining is not None and license_status.remaining <= 0 %}
+                <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
+                    <i class="bi bi-people-fill"></i>
+                    <div>Se alcanzó el límite de usuarios de la licencia ({{ license_status.max_users }}). No se pueden crear más usuarios.</div>
+                </div>
+                {% endif %}
                 {% block content %}{% endblock %}
             </div>
         </div>

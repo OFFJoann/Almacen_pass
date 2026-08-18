@@ -1,0 +1,20 @@
+[
+  {
+    "empresa": "Socia",
+    "licencia": "LIC-ACME-7F3A9C",
+    "max_users": 70,
+    "expires_at": "2026-12-31T23:59:59",
+    "installation_id": "",
+    "active": true,
+    "notes": "Plan anual"
+  },
+  {
+    "empresa": "Autoamerica",
+    "licencia": "LIC-GLOBEX-22B1D4",
+    "max_users": 100,
+    "expires_at": "2027-06-30T23:59:59",
+    "installation_id": "",
+    "active": true,
+    "notes": "Plan enterprise"
+  }
+]

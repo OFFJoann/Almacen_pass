@@ -158,6 +158,13 @@ class PasswordEntry(models.Model):
     is_compromised = models.BooleanField(_('comprometida'), default=False)
     compromised_checked_at = models.DateTimeField(_('última verificación'), null=True, blank=True)
     compromised_count = models.IntegerField(_('veces expuesta'), default=0)
+    password_entropy = models.FloatField(_('entropía de la contraseña'), default=0)
+    password_strength = models.CharField(
+        _('fortaleza de la contraseña'), max_length=20, blank=True, default=''
+    )
+    password_hmac = models.CharField(
+        _('HMAC de la contraseña'), max_length=64, blank=True, default=''
+    )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
 
@@ -176,7 +183,8 @@ class PasswordEntry(models.Model):
         return self.name
 
     def set_username(self, plaintext):
-        encrypted = encrypt_field(plaintext)
+        from .encryption import encrypt_field_fast
+        encrypted = encrypt_field_fast(plaintext)
         self.username_encrypted = encrypted['ciphertext']
         self.username_nonce = encrypted['nonce']
         self.username_salt = encrypted['salt']
@@ -184,13 +192,29 @@ class PasswordEntry(models.Model):
     def get_username(self):
         if not self.username_encrypted:
             return ''
-        return decrypt_field(self.username_encrypted, self.username_nonce, self.username_salt)
+        from .encryption import decrypt_field_fast, decrypt_field
+        try:
+            return decrypt_field_fast(self.username_encrypted, self.username_nonce)
+        except Exception:
+            if not self.username_salt:
+                return ''
+            return decrypt_field(self.username_encrypted, self.username_nonce, self.username_salt)
 
     def set_password(self, plaintext):
+        from .encryption import calculate_entropy, password_hmac, password_strength
         encrypted = encrypt_field(plaintext)
         self.password_encrypted = encrypted['ciphertext']
         self.password_nonce = encrypted['nonce']
         self.password_salt = encrypted['salt']
+        if plaintext:
+            strength = password_strength(plaintext)
+            self.password_entropy = strength['entropy']
+            self.password_strength = strength['label']
+            self.password_hmac = password_hmac(plaintext)
+        else:
+            self.password_entropy = 0
+            self.password_strength = ''
+            self.password_hmac = ''
 
     def get_password(self):
         if not self.password_encrypted:
@@ -198,12 +222,13 @@ class PasswordEntry(models.Model):
         return decrypt_field(self.password_encrypted, self.password_nonce, self.password_salt)
 
     def set_notes(self, plaintext):
+        from .encryption import encrypt_field_fast
         if not plaintext:
             self.notes_encrypted = ''
             self.notes_nonce = ''
             self.notes_salt = ''
             return
-        encrypted = encrypt_field(plaintext)
+        encrypted = encrypt_field_fast(plaintext)
         self.notes_encrypted = encrypted['ciphertext']
         self.notes_nonce = encrypted['nonce']
         self.notes_salt = encrypted['salt']
@@ -211,7 +236,13 @@ class PasswordEntry(models.Model):
     def get_notes(self):
         if not self.notes_encrypted:
             return ''
-        return decrypt_field(self.notes_encrypted, self.notes_nonce, self.notes_salt)
+        from .encryption import decrypt_field_fast, decrypt_field
+        try:
+            return decrypt_field_fast(self.notes_encrypted, self.notes_nonce)
+        except Exception:
+            if not self.notes_salt:
+                return ''
+            return decrypt_field(self.notes_encrypted, self.notes_nonce, self.notes_salt)
 
     def set_totp_secret(self, plaintext):
         if not plaintext:

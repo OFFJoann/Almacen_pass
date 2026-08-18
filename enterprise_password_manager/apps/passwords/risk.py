@@ -1,7 +1,6 @@
 from collections import Counter
 
 from .models import Vault, PasswordEntry
-from .encryption import calculate_entropy, password_strength
 
 
 def compute_user_risk(user):
@@ -10,26 +9,20 @@ def compute_user_risk(user):
     entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
     total_entries = entries.count()
 
-    weak_passwords_count = 0
-    plaintext_passwords = []
-    for e in entries:
-        try:
-            pwd = e.get_password()
-            if pwd:
-                plaintext_passwords.append((e, pwd))
-                if password_strength(pwd)['level'] <= 2:
-                    weak_passwords_count += 1
-        except Exception:
-            pass
+    weak_passwords_count = sum(
+        1 for e in entries
+        if e.password_strength in ('Débil', 'Muy Débil')
+    )
 
-    password_counter = Counter(pwd for _, pwd in plaintext_passwords)
-    has_duplicates = any(count > 1 for count in password_counter.values())
+    hmac_counter = Counter(e.password_hmac for e in entries if e.password_hmac)
+    has_duplicates = any(count > 1 for count in hmac_counter.values())
     compromised_count = entries.filter(is_compromised=True).count()
 
-    all_passwords_count = len(plaintext_passwords)
+    all_passwords_count = total_entries
     avg_entropy = 0
-    if plaintext_passwords:
-        avg_entropy = sum(calculate_entropy(pwd) for _, pwd in plaintext_passwords) / len(plaintext_passwords)
+    entropy_values = [e.password_entropy for e in entries if e.password_entropy > 0]
+    if entropy_values:
+        avg_entropy = sum(entropy_values) / len(entropy_values)
 
     score = 100
     score -= min(weak_passwords_count * 20, 50)
