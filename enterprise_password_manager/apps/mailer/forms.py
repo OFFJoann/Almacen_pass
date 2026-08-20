@@ -1,7 +1,7 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 from .models import (
-    SMTPSettings, NotificationGroup, NotificationRecipient, EmailTemplate,
+    SMTPSettings, EmailTemplate,
 )
 
 
@@ -49,34 +49,6 @@ class TestEmailForm(forms.Form):
         label=_('Correo de prueba'),
         widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'destinatario@ejemplo.com'}),
     )
-
-
-class NotificationGroupForm(forms.ModelForm):
-    class Meta:
-        model = NotificationGroup
-        fields = ['name', 'description', 'is_active']
-        widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['is_active'].widget.attrs['class'] = 'form-check-input'
-
-
-class NotificationRecipientForm(forms.ModelForm):
-    class Meta:
-        model = NotificationRecipient
-        fields = ['email', 'name', 'is_active']
-        widgets = {
-            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'destinatario@ejemplo.com'}),
-            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': _('Nombre (opcional)')}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['is_active'].widget.attrs['class'] = 'form-check-input'
 
 
 class EmailTemplateForm(forms.ModelForm):

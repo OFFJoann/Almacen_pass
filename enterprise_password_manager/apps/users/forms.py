@@ -27,14 +27,17 @@ class CustomUserChangeForm(UserChangeForm):
 
 
 class UserCreateForm(forms.ModelForm):
+    ADMIN_ROLES = ('superadmin', 'admin_usuarios')
+
     password = forms.CharField(
         label=_('Contraseña'),
         widget=forms.PasswordInput(attrs={'class': 'form-control'}),
-        min_length=12
+        required=False,
     )
     password_confirm = forms.CharField(
         label=_('Confirmar Contraseña'),
-        widget=forms.PasswordInput(attrs={'class': 'form-control'})
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        required=False,
     )
 
     class Meta:
@@ -52,7 +55,24 @@ class UserCreateForm(forms.ModelForm):
         self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
         if not self.request_user or not self.request_user.is_superadmin():
-            self.fields.pop('role')
+            # Un admin (no superadmin) solo puede crear usuarios estándar (SSO, sin contraseña local).
+            self.fields.pop('role', None)
+            self.fields.pop('password', None)
+            self.fields.pop('password_confirm', None)
+        else:
+            self.fields['password'].widget.attrs.update({'data-pw': '1'})
+            self.fields['password_confirm'].widget.attrs.update({'data-pw': '1'})
+
+    def clean(self):
+        cleaned = super().clean()
+        role = cleaned.get('role')
+        password = cleaned.get('password')
+        if role in self.ADMIN_ROLES:
+            if not password:
+                self.add_error('password', _('Los administradores deben tener una contraseña local.'))
+            elif len(password) < 12:
+                self.add_error('password', _('La contraseña debe tener al menos 12 caracteres.'))
+        return cleaned
 
     def clean_password_confirm(self):
         password = self.cleaned_data.get('password')
@@ -63,7 +83,12 @@ class UserCreateForm(forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.set_password(self.cleaned_data['password'])
+        password = self.cleaned_data.get('password')
+        if password:
+            user.set_password(password)
+        else:
+            # Usuario solo SSO: sin contraseña local utilizable.
+            user.set_unusable_password()
         if commit:
             user.save()
         return user
@@ -93,12 +118,6 @@ class UserEditForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        role = cleaned.get('role')
-        if role in ('superadmin', 'admin_usuarios'):
-            if not cleaned.get('emergency_contact_name'):
-                self.add_error('emergency_contact_name', _('Los administradores deben registrar el nombre del contacto de emergencia.'))
-            if not cleaned.get('emergency_contact_email'):
-                self.add_error('emergency_contact_email', _('Los administradores deben registrar el correo del contacto de emergencia.'))
         return cleaned
 
 

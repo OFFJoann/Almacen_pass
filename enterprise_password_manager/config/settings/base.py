@@ -84,6 +84,7 @@ MIDDLEWARE = [
     'apps.authentication.middleware.SecurityHeadersMiddleware',
     'apps.authentication.middleware.SessionSecurityMiddleware',
     'apps.audit.middleware.AuditMiddleware',
+    'apps.authentication.middleware.RequireLoginMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -285,8 +286,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'TICOlvidé API',
-    'DESCRIPTION': 'API REST para TICOlvidé',
+    'TITLE': 'TICO BOX API',
+    'DESCRIPTION': 'API REST para TICO BOX',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }

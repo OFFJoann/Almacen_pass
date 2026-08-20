@@ -1,4 +1,4 @@
-// TICOlvidé - Selección de código QR con el mouse para configurar 2FA
+// TICO BOX - Selección de código QR con el mouse para configurar 2FA
 (() => {
   if (window.__TICOLVIDE_QRSELECT__) return;
   window.__TICOLVIDE_QRSELECT__ = true;

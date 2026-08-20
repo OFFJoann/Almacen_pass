@@ -278,7 +278,7 @@ class PasswordEntry(models.Model):
         import pyotp
         return pyotp.totp.TOTP(secret).provisioning_uri(
             name=self.get_username() or self.name,
-            issuer_name='TICOlvidé'
+            issuer_name='TICO BOX'
         )
 
     def get_current_totp(self):

@@ -36,4 +36,22 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var role = document.querySelector('select[name="role"]');
+  if(!role) return;
+  function toggle(){
+    var isAdmin = ['superadmin', 'admin_usuarios'].indexOf(role.value) !== -1;
+    document.querySelectorAll('[data-pw]').forEach(function(el){
+      var row = el.closest('.mb-3');
+      if(row) row.style.display = isAdmin ? '' : 'none';
+    });
+  }
+  role.addEventListener('change', toggle);
+  toggle();
+});
+</script>
+{% endblock %}
 {% endblock %}

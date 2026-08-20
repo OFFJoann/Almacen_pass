@@ -24,15 +24,23 @@
                                 <td class="align-middle">
                                     <i class="bi bi-{{ e.icon }} text-muted me-2"></i>
                                     <strong>{{ e.name }}</strong>
+                                    {% if e.is_personal %}<span class="badge bg-info ms-1">Personal</span>{% else %}<span class="badge bg-secondary ms-1">Administración</span>{% endif %}
                                     <div class="text-muted small">{{ e.description|truncatechars:90 }}</div>
                                 </td>
                                 <td class="align-middle text-muted small d-none d-md-table-cell">
                                     {% if e.template %}{{ e.template.subject|default:'Sin asunto'|truncatechars:45 }}{% else %}Plantilla por defecto{% endif %}
                                 </td>
                                 <td class="text-end align-middle">
-                                    <a href="{% url 'mailer:template_edit' e.code %}" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-pencil"></i> Editar plantilla
-                                    </a>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'mailer:template_edit' e.code %}" class="btn btn-outline-primary">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </a>
+                                        <button type="button" class="btn btn-outline-success"
+                                                data-bs-toggle="modal" data-bs-target="#testModal"
+                                                data-test-code="{{ e.code }}" data-test-name="{{ e.name }}">
+                                            <i class="bi bi-send"></i> Probar
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -44,4 +52,6 @@
 {% empty %}
     <div class="alert alert-info">No hay eventos configurados.</div>
 {% endfor %}
+
+{% include 'mailer/_test_modal.html' %}
 {% endblock %}

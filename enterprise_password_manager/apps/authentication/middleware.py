@@ -2,12 +2,37 @@ import re
 from django.contrib.auth import logout
 from django.contrib import messages
 from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from apps.users.models import ActiveSession
 from apps.authentication.utils import parse_user_agent
+
+
+PUBLIC_PREFIXES = (
+    '/auth/',
+    '/sso/login',
+    '/sso/callback',
+    '/admin/',
+    '/api/',
+    '/__debug__/',
+    '/static/',
+    '/media/',
+)
+
+
+class RequireLoginMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not request.path.startswith(PUBLIC_PREFIXES):
+            if not request.user.is_authenticated:
+                login_url = reverse(settings.LOGIN_URL)
+                return redirect(f'{login_url}?next={request.path}')
+        return self.get_response(request)
 
 
 class SecurityHeadersMiddleware:

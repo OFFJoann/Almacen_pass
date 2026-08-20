@@ -14,7 +14,7 @@ class SMTPSettings(models.Model):
     ]
 
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    company_name = models.CharField(_('nombre de la empresa'), max_length=255, blank=True, default='TICOlvidé')
+    company_name = models.CharField(_('nombre de la empresa'), max_length=255, blank=True, default='TICO BOX')
     host = models.CharField(_('servidor SMTP'), max_length=255, default='smtp.gmail.com')
     port = models.PositiveIntegerField(_('puerto'), default=587)
     username = models.CharField(_('usuario'), max_length=255, blank=True, default='')
@@ -26,7 +26,7 @@ class SMTPSettings(models.Model):
         choices=ENCRYPTION_CHOICES, default='tls'
     )
     from_email = models.EmailField(_('correo remitente'), max_length=255, blank=True, default='')
-    from_name = models.CharField(_('nombre del remitente'), max_length=255, blank=True, default='TICOlvidé')
+    from_name = models.CharField(_('nombre del remitente'), max_length=255, blank=True, default='TICO BOX')
     timeout = models.PositiveIntegerField(_('tiempo de espera (s)'), default=30)
     is_active = models.BooleanField(_('activo'), default=False)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
@@ -72,6 +72,11 @@ class NotificationGroup(models.Model):
     )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
+    enterprise_groups = models.ManyToManyField(
+        'users.Group', blank=True, related_name='notification_groups',
+        verbose_name=_('grupos de la empresa'),
+        help_text=_('Los miembros activos de estos grupos recibirán las notificaciones automáticamente.'),
+    )
 
     class Meta:
         verbose_name = _('grupo de notificaciones')
@@ -121,6 +126,11 @@ class NotificationEvent(models.Model):
     icon = models.CharField(_('icono'), max_length=50, blank=True, default='bell')
     available_variables = models.JSONField(_('variables disponibles'), default=list, blank=True)
     is_active = models.BooleanField(_('activo'), default=True)
+    is_personal = models.BooleanField(
+        _('notificación personal del usuario'), default=False,
+        help_text=_('Si es True, la notificación se envía directamente al usuario involucrado '
+                    'y no es configurable por grupos de notificaciones.'),
+    )
     order = models.PositiveIntegerField(_('orden'), default=0)
 
     class Meta:

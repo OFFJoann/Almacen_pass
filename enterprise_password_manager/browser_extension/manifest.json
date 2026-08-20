@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "TICOlvidé - Gestor de Contraseñas",
+  "name": "TICO BOX - Gestor de Contraseñas",
   "version": "1.0.0",
-  "description": "Extensión oficial de TICOlvidé. Autocompleta, guarda y genera contraseñas desde tu navegador.",
+  "description": "Extensión oficial de TICO BOX. Autocompleta, guarda y genera contraseñas desde tu navegador.",
   "permissions": ["storage", "tabs", "scripting", "activeTab", "cookies", "notifications", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -10,7 +10,7 @@
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "TICOlvidé",
+    "default_title": "TICO BOX",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

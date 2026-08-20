@@ -5,6 +5,10 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from .managers import UserManager
 
+# Intentos fallidos de login local tras los cuales se bloquea la cuenta
+# (solo para login local; se desbloquea vía SSO o acceso de emergencia).
+LOCAL_LOGIN_LOCK_LIMIT = 3
+
 
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -22,6 +26,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(_('es staff'), default=False, editable=False)
     is_superuser = models.BooleanField(_('es superusuario'), default=False)
     force_password_change = models.BooleanField(_('forzar cambio de contraseña'), default=False)
+    failed_local_attempts = models.PositiveSmallIntegerField(
+        _('intentos fallidos de login local'), default=0,
+        help_text=_('Intentos fallidos de login local. Al alcanzar el límite la cuenta queda bloqueada para login local.')
+    )
     security_score = models.FloatField(_('puntaje de seguridad'), default=0.0)
     last_login_ip = models.GenericIPAddressField(_('última IP de acceso'), blank=True, null=True)
     last_login_user_agent = models.TextField(_('último user agent'), blank=True, default='')

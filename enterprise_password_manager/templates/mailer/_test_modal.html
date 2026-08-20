@@ -1,0 +1,34 @@
+<div class="modal fade" id="testModal" tabindex="-1" aria-labelledby="testModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'mailer:template_send_test' %}">
+      {% csrf_token %}
+      <input type="hidden" name="code" id="test-code">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title" id="testModalLabel"><i class="bi bi-send"></i> Enviar prueba de plantilla</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Plantilla: <strong id="test-event-name"></strong></p>
+          <label class="form-label fw-bold">Correo de destino</label>
+          <input type="email" name="to_email" class="form-control" placeholder="destinatario@ejemplo.com" required>
+          <div class="form-text">Se enviará un correo de prueba usando esta plantilla con datos de ejemplo.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Enviar prueba</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+document.querySelectorAll('[data-test-code]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var code = document.getElementById('test-code');
+    var name = document.getElementById('test-event-name');
+    if (code) { code.value = this.dataset.testCode || ''; }
+    if (name) { name.textContent = this.dataset.testName || ''; }
+  });
+});
+</script>

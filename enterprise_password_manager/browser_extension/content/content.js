@@ -1,4 +1,4 @@
-// TICOlvidé - content script (autofill + save detection)
+// TICO BOX - content script (autofill + save detection)
 (() => {
   if (window.__TICOLVIDE_CONTENT__) return;
   window.__TICOLVIDE_CONTENT__ = true;
@@ -84,7 +84,7 @@
     const btn = document.createElement('button');
     btn.className = 'ticolvide-widget-btn';
     btn.type = 'button';
-    btn.title = 'TICOlvidé';
+    btn.title = 'TICO BOX';
     btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3-9H9V6a3 3 0 0 1 6 0z"/></svg>';
     const list = document.createElement('div');
     list.className = 'ticolvide-widget-list';

@@ -88,3 +88,16 @@ def verify_hibp_password(password):
     except Exception:
         pass
     return 0
+
+
+def mask_email(email):
+    """Enmascara un correo mostrando el primer y últimos dos caracteres del
+    usuario, p.ej. fulanito@sociedad.com -> f*****to@sociedad.com."""
+    if not email or '@' not in email:
+        return email
+    local, domain = email.split('@', 1)
+    if len(local) <= 3:
+        masked_local = local[0] + '*' * max(1, len(local) - 1)
+    else:
+        masked_local = local[0] + '*' * (len(local) - 3) + local[-2:]
+    return f'{masked_local}@{domain}'
