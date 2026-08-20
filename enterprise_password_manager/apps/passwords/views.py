@@ -146,7 +146,7 @@ def entry_create(request):
                     'dominio': domain_from_url(entry.url),
                     'url': entry.url or '/',
                     'riesgo_actual': entry.get_sensitivity_display(),
-                })
+                }, recipients=[request.user.email])
 
             if entry.is_compromised:
                 messages.warning(request, _('Esta contraseña ha sido expuesta en filtraciones de datos. Se recomienda cambiarla.'))
@@ -361,7 +361,7 @@ def entry_delete(request, pk):
             'usuario': request.user.email,
             'nombre_servicio': entry.name,
             'dominio': domain_from_url(entry.url),
-        })
+        }, recipients=[request.user.email])
 
         messages.success(request, _('Contraseña movida a la papelera'))
     return redirect('passwords:vault')
@@ -544,6 +544,12 @@ def entry_share(request, pk):
                     notification_type='info',
                     action_url=reverse('passwords:share_requests'),
                 )
+                notify_event('reshare_requested', {
+                    'solicitante': request.user.email,
+                    'nombre_servicio': entry.name,
+                    'compartido_con': share_request.target_user.email,
+                }, recipients=[owner.email])
+
                 from apps.audit.models import AuditLog
                 AuditLog.objects.create(
                     user=request.user,
@@ -596,12 +602,19 @@ def entry_share(request, pk):
                     ip_address=request.META.get('REMOTE_ADDR', ''),
                 )
 
+                recipients = []
+                if target_user and target_user.email:
+                    recipients.append(target_user.email)
+                elif target_group:
+                    recipients = [
+                        u.email for u in target_group.members.filter(is_active=True) if u.email
+                    ]
                 notify_event('password_shared', {
                     'compartido_por': request.user.email,
                     'compartido_con': target,
                     'nombre_servicio': entry.name,
                     'url': entry.url or '/',
-                })
+                }, recipients=recipients)
                 messages.success(request, _('Contraseña compartida exitosamente'))
 
             return redirect('passwords:detail', pk=entry.pk)
@@ -728,6 +741,11 @@ def share_request_approve(request, request_id):
         result='success',
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
+
+    notify_event('reshare_approved', {
+        'nombre_servicio': entry.name,
+        'compartido_con': target.email,
+    }, recipients=[share_request.requested_by.email])
 
     messages.success(request, _('Solicitud aprobada y contraseña compartida.'))
     return redirect('passwords:share_requests')

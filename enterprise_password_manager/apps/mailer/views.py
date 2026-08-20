@@ -8,16 +8,14 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
 from .forms import (
-    SMTPSettingsForm, TestEmailForm, NotificationGroupForm,
-    NotificationRecipientForm, EmailTemplateForm,
+    SMTPSettingsForm, TestEmailForm, EmailTemplateForm,
 )
 from .models import (
-    SMTPSettings, NotificationGroup, NotificationRecipient,
-    NotificationEvent, GroupNotificationEvent, EmailTemplate,
+    SMTPSettings, NotificationEvent, EmailTemplate,
 )
 from .services import (
-    get_smtp_settings, send_test_email, sample_context, render_string,
-    get_smtp_backend,
+    get_smtp_settings, send_test_email, send_event_test, sample_context,
+    render_string, get_smtp_backend,
 )
 
 
@@ -79,149 +77,6 @@ def settings_send_test(request):
 
 
 @login_required
-def group_list(request):
-    _require_superadmin(request)
-    groups = NotificationGroup.objects.annotate(
-        num_recipients=Count('recipients')
-    )
-    search = request.GET.get('search', '')
-    if search:
-        groups = groups.filter(name__icontains=search)
-    return render(request, 'mailer/group_list.html', {
-        'groups': groups,
-        'active_tab': 'groups',
-    })
-
-
-@login_required
-def group_create(request):
-    _require_superadmin(request)
-    if request.method == 'POST':
-        form = NotificationGroupForm(request.POST)
-        if form.is_valid():
-            group = form.save(commit=False)
-            group.created_by = request.user
-            group.save()
-            messages.success(request, _('Grupo de notificaciones creado.'))
-            return redirect('mailer:group_detail', pk=group.pk)
-    else:
-        form = NotificationGroupForm()
-    return render(request, 'mailer/group_form.html', {
-        'form': form,
-        'active_tab': 'groups',
-    })
-
-
-@login_required
-def group_edit(request, pk):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    if request.method == 'POST':
-        form = NotificationGroupForm(request.POST, instance=group)
-        if form.is_valid():
-            form.save()
-            messages.success(request, _('Grupo actualizado.'))
-            return redirect('mailer:group_detail', pk=group.pk)
-    else:
-        form = NotificationGroupForm(instance=group)
-    return render(request, 'mailer/group_form.html', {
-        'form': form,
-        'group': group,
-        'active_tab': 'groups',
-    })
-
-
-@login_required
-def group_delete(request, pk):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    if request.method == 'POST':
-        name = group.name
-        group.delete()
-        messages.success(request, _('Grupo "%(name)s" eliminado.') % {'name': name})
-        return redirect('mailer:groups')
-    return render(request, 'mailer/group_confirm_delete.html', {
-        'group': group,
-        'active_tab': 'groups',
-    })
-
-
-@login_required
-def group_detail(request, pk):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    events = NotificationEvent.objects.filter(is_active=True).select_related('template')
-    configs = {
-        c.event_id: c for c in GroupNotificationEvent.objects.filter(group=group)
-    }
-    recipients = group.recipients.all()
-    return render(request, 'mailer/group_detail.html', {
-        'group': group,
-        'events': events,
-        'configs': configs,
-        'recipients': recipients,
-        'recipient_form': NotificationRecipientForm(),
-        'active_tab': 'groups',
-    })
-
-
-@login_required
-@require_POST
-def group_recipient_add(request, pk):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    form = NotificationRecipientForm(request.POST)
-    if form.is_valid():
-        recipient, created = NotificationRecipient.objects.get_or_create(
-            group=group,
-            email=form.cleaned_data['email'].lower(),
-            defaults={
-                'name': form.cleaned_data.get('name', ''),
-                'is_active': form.cleaned_data.get('is_active', True),
-            },
-        )
-        if created:
-            messages.success(request, _('Destinatario agregado.'))
-        else:
-            messages.warning(request, _('El destinatario ya existía en este grupo.'))
-    else:
-        messages.error(request, _('Correo inválido.'))
-    return redirect('mailer:group_detail', pk=group.pk)
-
-
-@login_required
-@require_POST
-def group_recipient_delete(request, pk, recipient_id):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    recipient = get_object_or_404(NotificationRecipient, pk=recipient_id, group=group)
-    recipient.delete()
-    messages.success(request, _('Destinatario eliminado.'))
-    return redirect('mailer:group_detail', pk=group.pk)
-
-
-@login_required
-@require_POST
-def group_event_toggle(request, pk, event_id):
-    _require_superadmin(request)
-    group = get_object_or_404(NotificationGroup, pk=pk)
-    event = get_object_or_404(NotificationEvent, pk=event_id, is_active=True)
-    config, created = GroupNotificationEvent.objects.get_or_create(
-        group=group, event=event,
-        defaults={'is_enabled': True},
-    )
-    if not created:
-        config.is_enabled = not config.is_enabled
-        config.save()
-    state = config.is_enabled
-    return JsonResponse({
-        'success': True,
-        'enabled': state,
-        'label': _('Habilitado') if state else _('Deshabilitado'),
-    })
-
-
-@login_required
 def template_list(request):
     _require_superadmin(request)
     events = NotificationEvent.objects.filter(is_active=True).order_by('category', 'order', 'name')
@@ -249,6 +104,31 @@ def template_edit(request, code):
         'event': event,
         'active_tab': 'templates',
     })
+
+
+@login_required
+@require_POST
+def template_send_test(request):
+    _require_superadmin(request)
+    code = (request.POST.get('code') or '').strip()
+    to_email = (request.POST.get('to_email') or '').strip()
+    if not code or not to_email or '@' not in to_email:
+        messages.error(request, _('Ingresa un correo de destino válido.'))
+        return redirect('mailer:template_list')
+    event = get_object_or_404(NotificationEvent, code=code, is_active=True)
+    ok, error = send_event_test(code, to_email)
+    if ok:
+        messages.success(
+            request,
+            _('Prueba de la plantilla "%(name)s" enviada a %(email)s.')
+            % {'name': event.name, 'email': to_email}
+        )
+    else:
+        messages.error(
+            request,
+            _('No se pudo enviar la prueba: %(error)s') % {'error': error}
+        )
+    return redirect('mailer:template_list')
 
 
 @login_required

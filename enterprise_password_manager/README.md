@@ -1,4 +1,4 @@
-# TICOlvidé · Enterprise Password Manager (EPM)
+# TICO BOX · Enterprise Password Manager (EPM)
 
 Gestor de contraseñas y secretos empresarial para equipos. Permite a una
 organización almacenar credenciales, secretos y TOTP de forma cifrada, con

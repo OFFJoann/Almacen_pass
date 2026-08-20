@@ -1,4 +1,4 @@
-// TICOlvidé - popup
+// TICO BOX - popup
 const $ = (id) => document.getElementById(id);
 
 let currentTab = null;

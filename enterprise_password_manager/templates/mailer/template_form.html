@@ -38,6 +38,11 @@
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar plantilla</button>
                         <button type="button" class="btn btn-outline-primary" id="preview-btn"><i class="bi bi-eye"></i> Vista previa</button>
+                        <button type="button" class="btn btn-outline-success ms-auto"
+                                data-bs-toggle="modal" data-bs-target="#testModal"
+                                data-test-code="{{ event.code }}" data-test-name="{{ event.name }}">
+                            <i class="bi bi-send"></i> Enviar prueba
+                        </button>
                     </div>
                 </form>
             </div>
@@ -66,6 +71,8 @@
         </div>
     </div>
 </div>
+
+{% include 'mailer/_test_modal.html' %}
 {% endblock %}
 
 {% block extra_js %}

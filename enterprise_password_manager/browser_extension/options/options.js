@@ -1,4 +1,4 @@
-// TICOlvidé - options
+// TICO BOX - options
 const serverInput = document.getElementById('serverUrl');
 const msg = document.getElementById('msg');
 const saved = document.getElementById('saved');

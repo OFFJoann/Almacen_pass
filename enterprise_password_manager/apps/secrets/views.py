@@ -253,11 +253,18 @@ def secret_share(request, pk):
                 share.save()
 
                 target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
+                extra_recipients = []
+                if target_user and target_user.email:
+                    extra_recipients.append(target_user.email)
+                elif target_group:
+                    extra_recipients = [
+                        u.email for u in target_group.members.filter(is_active=True) if u.email
+                    ]
                 notify_event('secret_shared', {
                     'compartido_por': request.user.email,
                     'compartido_con': target,
                     'nombre_servicio': secret.name,
-                })
+                }, extra_recipients=extra_recipients)
                 messages.success(request, _('Secreto compartido exitosamente.'))
             return redirect('secrets:detail', pk=secret.pk)
     else:

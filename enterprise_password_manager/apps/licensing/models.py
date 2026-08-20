@@ -39,6 +39,10 @@ class License(models.Model):
     last_checked_at = models.DateTimeField(null=True, blank=True)
     is_valid = models.BooleanField(default=False)
     error = models.CharField(max_length=255, blank=True, default='')
+    expiry_alert_sent = models.BooleanField(
+        default=False,
+        help_text='Indica si ya se envió la alerta de licencia próxima a vencer (para no duplicar).',
+    )
 
     class Meta:
         verbose_name = 'Licencia'

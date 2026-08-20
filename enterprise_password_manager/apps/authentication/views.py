@@ -2,6 +2,7 @@ import pyotp
 import qrcode
 import io
 import base64
+import string
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
@@ -13,6 +14,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.crypto import get_random_string
 from django.views.decorators.cache import never_cache
 from django_ratelimit.decorators import ratelimit
 from django.http import JsonResponse, HttpResponseRedirect
@@ -20,12 +22,15 @@ from django.conf import settings
 
 from .forms import (LoginForm, MFAForm, MFASetupForm, PasswordResetRequestForm,
                     SetPasswordForm, EmergencyContactForm)
-from .utils import parse_user_agent, get_client_ip, user_has_active_session
-from apps.users.models import User, LoginHistory, ActiveSession, get_user_effective_policy
+from .utils import parse_user_agent, get_client_ip, user_has_active_session, mask_email
+from apps.users.models import User, LoginHistory, ActiveSession, get_user_effective_policy, LOCAL_LOGIN_LOCK_LIMIT
+from apps.audit.models import AuditLog
 from apps.mailer.services import notify_event, send_email, get_smtp_settings
 from rest_framework.authtoken.models import Token
 
 SESSION_TIMEOUT_SECONDS = 3600
+
+EMERGENCY_PASSWORD_CHARS = string.ascii_letters + string.digits + '!@#$%^&*'
 
 
 def session_expiry_for(user, remember_me):
@@ -44,6 +49,17 @@ def login_view(request):
         return redirect('passwords:vault')
 
     if request.method == 'POST':
+        email = (request.POST.get('username') or '').strip().lower()
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+
+        # Cuenta bloqueada por intentos fallidos de login local.
+        if user and user.failed_local_attempts >= LOCAL_LOGIN_LOCK_LIMIT:
+            messages.error(request, _(
+                'Tu cuenta está bloqueada por intentos fallidos de inicio de sesión local. '
+                'Inicia sesión con SSO o usa el acceso de emergencia para desbloquearla.'
+            ))
+            return render(request, 'authentication/login.html', {'form': LoginForm(request)})
+
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
@@ -103,7 +119,8 @@ def login_view(request):
             User.objects.filter(pk=user.pk).update(
                 last_login=timezone.now(),
                 last_login_ip=ip,
-                last_login_user_agent=user_agent
+                last_login_user_agent=user_agent,
+                failed_local_attempts=0,
             )
 
             if user.can_manage_users() and not user.has_emergency_contact():
@@ -117,6 +134,36 @@ def login_view(request):
             next_url = request.GET.get('next', 'passwords:vault')
             return redirect(next_url)
         else:
+            # Contar intento fallido solo para cuentas con contraseña local utilizable.
+            if user and user.has_usable_password():
+                new_attempts = min(user.failed_local_attempts + 1, LOCAL_LOGIN_LOCK_LIMIT)
+                User.objects.filter(pk=user.pk).update(failed_local_attempts=new_attempts)
+                if new_attempts >= LOCAL_LOGIN_LOCK_LIMIT:
+                    ip = get_client_ip(request)
+                    user_agent = request.META.get('HTTP_USER_AGENT', '')
+                    parsed = parse_user_agent(user_agent)
+                    LoginHistory.objects.create(
+                        user=user,
+                        ip_address=ip,
+                        user_agent=user_agent,
+                        browser=parsed['browser'],
+                        os=parsed['os'],
+                        device=parsed['device'],
+                        success=False,
+                        failure_reason='Cuenta bloqueada por intentos fallidos de login local',
+                    )
+                    AuditLog.objects.create(
+                        user=user,
+                        action='ACCOUNT_LOCKED',
+                        details='Cuenta bloqueada tras 3 intentos fallidos de inicio de sesión local',
+                        result='failure',
+                        ip_address=ip,
+                    )
+                    messages.error(request, _(
+                        'Tu cuenta ha sido bloqueada por intentos fallidos de inicio de sesión local. '
+                        'Inicia sesión con SSO o usa el acceso de emergencia para desbloquearla.'
+                    ))
+                    return render(request, 'authentication/login.html', {'form': LoginForm(request)})
             messages.error(request, _('Correo o contraseña inválidos'))
             notify_event('login_failed', {
                 'usuario': request.POST.get('username', ''),
@@ -186,10 +233,15 @@ def mfa_verify(request):
                     expires_at=timezone.now() + timezone.timedelta(seconds=session_expiry),
                 )
 
-                User.objects.filter(pk=user.pk).update(last_login=timezone.now(), last_login_ip=ip)
+                User.objects.filter(pk=user.pk).update(
+                    last_login=timezone.now(), last_login_ip=ip, failed_local_attempts=0
+                )
 
                 del request.session['mfa_user_id']
                 del request.session['mfa_remember']
+
+                if user.force_password_change:
+                    return redirect('authentication:force_password_change')
 
                 if user.can_manage_users() and not user.has_emergency_contact():
                     messages.info(request, _('Los administradores deben registrar un contacto de emergencia para poder recuperar su contraseña.'))
@@ -236,7 +288,7 @@ def setup_mfa(request):
         user.save()
 
     totp = pyotp.TOTP(user.mfa_secret)
-    provisioning_uri = totp.provisioning_uri(user.email, issuer_name='TICOlvidé')
+    provisioning_uri = totp.provisioning_uri(user.email, issuer_name='TICO BOX')
 
     qr = qrcode.make(provisioning_uri)
     buffer = io.BytesIO()
@@ -309,72 +361,78 @@ def password_reset_request(request):
             email = form.cleaned_data['email'].strip().lower()
             user = User.objects.filter(email__iexact=email, is_active=True).first()
             if user:
-                uid = urlsafe_base64_encode(force_bytes(user.pk))
-                token = default_token_generator.make_token(user)
-                link = request.build_absolute_uri(reverse(
-                    'authentication:password_reset_confirm',
-                    kwargs={'uidb64': uid, 'token': token},
-                ))
                 sm = get_smtp_settings()
-                company = sm.company_name if sm and sm.company_name else 'TICOlvidé'
+                company = sm.company_name if sm and sm.company_name else 'TICO BOX'
+                login_url = request.build_absolute_uri(reverse('authentication:login'))
 
-                if user.can_manage_users() and user.has_emergency_contact():
-                    html = (
-                        '<h2>Recuperación de contraseña</h2>'
-                        f'<p>Hola {user.emergency_contact_name},</p>'
-                        f'<p>El administrador <strong>{user.full_name}</strong> ({user.email}) solicitó '
-                        f'recuperar su contraseña en {company}.</p>'
-                        '<p>Si reconoces esta solicitud, abre el siguiente enlace para completar el '
-                        f'restablecimiento de su contraseña:</p>'
-                        f'<p><a href="{link}">{link}</a></p>'
-                        '<p>Si no la reconoces, ignora este correo.</p>'
-                    )
-                    text = (
-                        'Recuperación de contraseña\n\n'
-                        f'Hola {user.emergency_contact_name},\n'
-                        f'El administrador {user.full_name} ({user.email}) solicitó recuperar su '
-                        f'contraseña en {company}.\n'
-                        'Si reconoces esta solicitud, abre el siguiente enlace para completar el '
-                        f'restablecimiento:\n{link}\n'
-                        'Si no la reconoces, ignora este correo.\n'
-                    )
-                    send_email(
-                        user.emergency_contact_email,
-                        _('Solicitud de recuperación de contraseña - {company}').format(company=company),
-                        html, text,
-                        status='recovery',
-                    )
-                elif not user.can_manage_users():
-                    html = (
-                        '<h2>Recuperación de contraseña</h2>'
-                        f'<p>Hola {user.full_name},</p>'
-                        f'<p>Recibimos una solicitud para recuperar tu contraseña en {company}.</p>'
-                        f'<p>Abre el siguiente enlace para restablecerla:</p>'
-                        f'<p><a href="{link}">{link}</a></p>'
-                        '<p>Si no la solicitaste, ignora este correo.</p>'
-                    )
-                    text = (
-                        'Recuperación de contraseña\n\n'
-                        f'Hola {user.full_name},\n'
-                        f'Recibimos una solicitud para recuperar tu contraseña en {company}.\n'
-                        f'Abre el siguiente enlace para restablecerla:\n{link}\n'
-                        'Si no la solicitaste, ignora este correo.\n'
-                    )
-                    send_email(
-                        user.email,
-                        _('Recuperación de contraseña - {company}').format(company=company),
-                        html, text,
-                        status='recovery',
-                    )
-                elif user.can_manage_users() and not user.has_emergency_contact():
-                    LoginHistory.objects.create(
-                        user=user,
-                        ip_address=get_client_ip(request),
-                        user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                        success=False,
-                        failure_reason='Recuperación sin contacto de emergencia',
-                    )
-            messages.success(request, _('Si el correo corresponde a un usuario, se envió una notificación de recuperación.'))
+                # Usuarios estándar: solo SSO, sin recuperación de contraseña local.
+                # No se muestra nada; se redirige directo al inicio de sesión.
+                if not user.can_manage_users():
+                    return redirect('authentication:login')
+
+                if not user.has_emergency_contact():
+                    messages.error(request, _(
+                        'Tu cuenta no tiene un contacto de emergencia configurado. '
+                        'Contacta a un SuperAdmin para habilitar el acceso de emergencia.'
+                    ))
+                    return redirect('authentication:password_reset_request')
+
+                # Acceso de emergencia: generamos una contraseña local temporal y se la
+                # enviamos al contacto de emergencia (no al administrador).
+                temp_password = get_random_string(16, allowed_chars=EMERGENCY_PASSWORD_CHARS)
+                user.set_password(temp_password)
+                user.force_password_change = True
+                user.failed_local_attempts = 0
+                user.save()
+
+                masked = mask_email(user.emergency_contact_email)
+                html = (
+                    f'<h2>Acceso de emergencia - {company}</h2>'
+                    f'<p>Hola {user.emergency_contact_name},</p>'
+                    f'<p>Se solicitó un acceso de emergencia para el administrador '
+                    f'<strong>{user.full_name}</strong> ({user.email}) en {company}.</p>'
+                    f'<p>Si reconoces esta solicitud, comparte las siguientes credenciales con el '
+                    f'administrador para que pueda iniciar sesión localmente (por ejemplo, si el SSO falla):</p>'
+                    f'<ul>'
+                    f'<li><strong>Correo:</strong> {user.email}</li>'
+                    f'<li><strong>Contraseña temporal:</strong> {temp_password}</li>'
+                    f'</ul>'
+                    f'<p>Inicia sesión en: <a href="{login_url}">{login_url}</a></p>'
+                    f'<p>Al entrar se le pedirá cambiar la contraseña temporal.</p>'
+                    f'<p>Si no reconoces esta solicitud, ignora este correo y avisa al equipo de seguridad.</p>'
+                )
+                text = (
+                    f'Acceso de emergencia - {company}\n\n'
+                    f'Hola {user.emergency_contact_name},\n'
+                    f'Se solicitó un acceso de emergencia para el administrador {user.full_name} '
+                    f'({user.email}) en {company}.\n\n'
+                    f'Credenciales para inicio de sesión local:\n'
+                    f'Correo: {user.email}\n'
+                    f'Contraseña temporal: {temp_password}\n\n'
+                    f'Inicia sesión en: {login_url}\n'
+                    f'Al entrar se pedirá cambiar la contraseña temporal.\n'
+                )
+                send_email(
+                    user.emergency_contact_email,
+                    _('Acceso de emergencia - {company}').format(company=company),
+                    html, text,
+                    status='recovery',
+                )
+                LoginHistory.objects.create(
+                    user=user,
+                    ip_address=get_client_ip(request),
+                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                    success=True,
+                    failure_reason='Solicitud de acceso de emergencia',
+                )
+                messages.success(request, _(
+                    'Te enviamos un correo a tu usuario de emergencia {masked} con las instrucciones '
+                    'y credenciales de acceso de emergencia.'
+                ).format(masked=masked))
+                return redirect('authentication:login')
+            messages.success(request, _(
+                'Si el correo corresponde a un usuario, se envió una notificación de recuperación.'
+            ))
             return redirect('authentication:login')
     else:
         form = PasswordResetRequestForm()

@@ -1,4 +1,4 @@
-// TICOlvidé - background (service worker MV3)
+// TICO BOX - background (service worker MV3)
 const DEFAULT_SERVER_URL = 'http://localhost:8001';
 const LEGACY_DEFAULT_SERVER_URL = 'http://localhost:8000';
 
@@ -324,7 +324,7 @@ async function showSaveNotification(tabId, data) {
     await chrome.notifications.create(notifId, {
       type: 'basic',
       iconUrl: 'icons/icon128.png',
-      title: 'TICOlvidé',
+      title: 'TICO BOX',
       message: '¿Guardar la contraseña de ' + (data.name || data.hostname || 'este sitio') + '?',
       buttons: [
         { title: 'Guardar' },

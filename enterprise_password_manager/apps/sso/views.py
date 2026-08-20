@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import UpdateView
@@ -132,29 +132,41 @@ def sso_login(request):
     return redirect(auth_url)
 
 
+def _sso_error(request, config, action, details, status=400):
+    ip = get_client_ip(request)
+    if config:
+        SSOLog.objects.create(
+            config=config,
+            action=action,
+            details=str(details),
+            success=False,
+            ip_address=ip,
+        )
+    return HttpResponse(
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        '<title>Error SSO</title></head><body style="font-family:sans-serif;padding:2rem">'
+        f'<h2>Error de inicio de sesión SSO</h2>'
+        f'<p style="color:#b00"><strong>{action}</strong></p>'
+        f'<pre style="white-space:pre-wrap;background:#f5f5f5;padding:1rem;border-radius:6px">{details}</pre>'
+        '<p><a href="/auth/login/">Volver al inicio de sesión</a></p>'
+        '</body></html>',
+        status=status,
+    )
+
+
 @csrf_exempt
 def sso_callback(request):
     config = SSOConfiguration.objects.filter(is_active=True).first()
     if not config:
-        messages.error(request, _('SSO no está configurado'))
-        return redirect('authentication:login')
+        return HttpResponse('SSO no está configurado', status=400)
 
-    code = request.GET.get('code')
     error = request.GET.get('error')
     if error:
-        SSOLog.objects.create(
-            config=config,
-            action='CALLBACK_ERROR',
-            details=f'Auth error: {error}',
-            success=False,
-            ip_address=request.META.get('REMOTE_ADDR', ''),
-        )
-        messages.error(request, _('Autenticación SSO fallida'))
-        return redirect('authentication:login')
+        return _sso_error(request, config, 'CALLBACK_ERROR', f'Auth error: {error}')
 
+    code = request.GET.get('code')
     if not code:
-        messages.error(request, _('No se recibió código de autorización'))
-        return redirect('authentication:login')
+        return _sso_error(request, config, 'CALLBACK_NO_CODE', 'No se recibió código de autorización')
 
     try:
         token_url = f'https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/token'
@@ -170,27 +182,22 @@ def sso_callback(request):
         token_json = token_response.json()
 
         if 'access_token' not in token_json:
-            SSOLog.objects.create(
-                config=config,
-                action='TOKEN_ERROR',
-                details=f'Failed to get token: {token_json.get("error_description", "Unknown error")}',
-                success=False,
-                ip_address=request.META.get('REMOTE_ADDR', ''),
-            )
-            messages.error(request, _('Error al autenticar con Microsoft'))
-            return redirect('authentication:login')
+            desc = token_json.get('error_description', token_json.get('error', 'Unknown error'))
+            return _sso_error(request, config, 'TOKEN_ERROR', f'Fallo al obtener token: {desc}')
 
         user_info_url = 'https://graph.microsoft.com/v1.0/me'
         headers = {'Authorization': f'Bearer {token_json["access_token"]}'}
         user_response = requests.get(user_info_url, headers=headers, timeout=10)
         user_data = user_response.json()
 
-        email = user_data.get('userPrincipalName', '') or user_data.get('mail', '')
-        name = user_data.get('displayName', email.split('@')[0])
+        email = user_data.get('userPrincipalName') or user_data.get('mail') or ''
+        name = user_data.get('displayName') or (email.split('@')[0] if '@' in email else email)
 
         if not email:
-            messages.error(request, _('No se pudo obtener el correo de Microsoft'))
-            return redirect('authentication:login')
+            return _sso_error(
+                request, config, 'NO_EMAIL',
+                f'Microsoft no devolvió un correo. Respuesta Graph: {user_data}',
+            )
 
         try:
             user, created = User.objects.get_or_create(
@@ -203,13 +210,14 @@ def sso_callback(request):
         except Exception as exc:  # noqa: BLE001
             from apps.licensing.exceptions import LicenseError
             if isinstance(exc, LicenseError):
-                messages.error(request, _('No se pudo crear tu usuario: se alcanzó el límite de la licencia.'))
-                return redirect('authentication:login')
+                return _sso_error(
+                    request, config, 'LICENSE_LIMIT',
+                    'No se pudo crear tu usuario: se alcanzó el límite de la licencia.',
+                )
             raise
 
         if not user.is_active:
-            messages.error(request, _('Tu cuenta ha sido deshabilitada'))
-            return redirect('authentication:login')
+            return _sso_error(request, config, 'USER_INACTIVE', 'Tu cuenta ha sido deshabilitada')
 
         if config.sync_groups:
             group_ids = user_data.get('groupIds', [])
@@ -230,7 +238,7 @@ def sso_callback(request):
             success=True,
         )
 
-        login(request, user)
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         ActiveSession.objects.update_or_create(
             user=user, session_key=request.session.session_key,
             defaults={
@@ -250,16 +258,14 @@ def sso_callback(request):
             ip_address=ip,
         )
 
+        if user.force_password_change:
+            return redirect('authentication:force_password_change')
+
+        # El login por SSO también sirve para desbloquear la cuenta bloqueada por intentos locales.
+        User.objects.filter(pk=user.pk).update(failed_local_attempts=0)
+
         messages.success(request, _(f'¡Bienvenido, {user.full_name}!'))
         return redirect('passwords:vault')
 
     except Exception as e:
-        SSOLog.objects.create(
-            config=config,
-            action='LOGIN_ERROR',
-            details=f'SSO error: {str(e)}',
-            success=False,
-            ip_address=request.META.get('REMOTE_ADDR', ''),
-        )
-        messages.error(request, _('Autenticación SSO fallida'))
-        return redirect('authentication:login')
+        return _sso_error(request, config, 'LOGIN_ERROR', f'SSO error: {e}')

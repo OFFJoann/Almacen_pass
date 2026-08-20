@@ -57,7 +57,7 @@ def get_smtp_backend(sm=None):
 def base_context():
     sm = get_smtp_settings()
     now = timezone.localtime()
-    company = sm.company_name if sm and sm.company_name else 'TICOlvidé'
+    company = sm.company_name if sm and sm.company_name else 'TICO BOX'
     return {
         'nombre_empresa': company,
         'dominio': '',
@@ -147,7 +147,7 @@ def send_email(to, subject, body_html, body_text, sm=None, event=None, group=Non
         return False, _('SMTP no configurado o inactivo')
 
     sm = sm or get_smtp_settings()
-    from_name = sm.from_name or sm.company_name or 'TICOlvidé'
+    from_name = sm.from_name or sm.company_name or 'TICO BOX'
     from_email = sm.from_email or sm.username
     if not from_email:
         from .models import EmailLog
@@ -184,36 +184,71 @@ def send_email(to, subject, body_html, body_text, sm=None, event=None, group=Non
         return False, str(exc)
 
 
-def collect_targets(event_code):
-    from .models import NotificationEvent, GroupNotificationEvent, NotificationRecipient
+def get_admin_recipients():
+    """Correos de los usuarios administradores activos (SuperAdmin / Admin Usuarios)."""
+    from apps.users.models import User
+    targets = []
+    seen = set()
+    for user in User.objects.filter(is_active=True, role__in=('superadmin', 'admin_usuarios')):
+        if user.email and user.email.lower() not in seen:
+            targets.append((None, user.email.lower()))
+            seen.add(user.email.lower())
+    return targets
+
+
+def notify_event(event_code, context=None, triggered_by=None, recipients=None, extra_recipients=None):
+    """Enviar notificaciones para un evento según su tipo (entrega por lógica).
+
+    - Eventos de usuario (is_personal=True): se envían SIEMPRE y únicamente a los
+      usuarios indicados en ``recipients`` (el usuario estándar involucrado). No son
+      configurables ni pasan por grupos.
+    - Eventos de administración (is_personal=False): se envían a los administradores
+      (por rol) y, opcionalmente, a ``recipients``/``extra_recipients`` adicionales.
+    """
+    from .models import NotificationEvent
     try:
         event = NotificationEvent.objects.get(code=event_code, is_active=True)
     except NotificationEvent.DoesNotExist:
-        return event_code, None, []
-    targets = []
-    configs = GroupNotificationEvent.objects.filter(
-        event=event, is_enabled=True, group__is_active=True
-    ).select_related('group')
-    for config in configs:
-        recipients = NotificationRecipient.objects.filter(
-            group=config.group, is_active=True
-        )
-        for recipient in recipients:
-            targets.append((config.group, recipient))
-    return event_code, event, targets
-
-
-def notify_event(event_code, context=None, triggered_by=None):
-    """Enviar notificaciones para un evento a todos los grupos habilitados."""
-    event_code, event, targets = collect_targets(event_code)
-    if event is None or not targets:
         return 0
-    sent = 0
     ctx = context or {}
-    for group, recipient in targets:
+    sent = 0
+
+    if event.is_personal:
+        emails = []
+        seen = set()
+        for email in (recipients or []):
+            if email and email.lower() not in seen:
+                emails.append(email.lower())
+                seen.add(email.lower())
+        if not emails:
+            return 0
+        for email in emails:
+            subject, body_html, body_text = render_event_email(event, ctx)
+            ok, error = send_email(
+                email, subject, body_html, body_text,
+                event=event, group=None,
+            )
+            if ok:
+                sent += 1
+        return sent
+
+    # Evento de administración: administradores (por rol) + destinatarios adicionales.
+    targets = get_admin_recipients()
+    seen = {email for _, email in targets}
+    for email in (recipients or []):
+        if email and email.lower() not in seen:
+            targets.append((None, email.lower()))
+            seen.add(email.lower())
+    for email in (extra_recipients or []):
+        if email and email.lower() not in seen:
+            targets.append((None, email.lower()))
+            seen.add(email.lower())
+    if not targets:
+        return 0
+    for group, email in targets:
         subject, body_html, body_text = render_event_email(event, ctx)
         ok, error = send_email(
-            recipient.email, subject, body_html, body_text,
+            email, subject, body_html, body_text,
             event=event, group=group,
         )
         if ok:
@@ -237,7 +272,7 @@ def send_test_email(to, context=None):
     if created:
         EmailTemplate.objects.create(
             event=event,
-            subject=_('Correo de prueba TICOlvidé'),
+            subject=_('Correo de prueba TICO BOX'),
             body_html=(
                 '<h2>Configuración SMTP correcta</h2>'
                 '<p>Hola {{ nombre_empresa }} ({{ usuario }}), este correo confirma que '
@@ -256,3 +291,17 @@ def send_test_email(to, context=None):
     subject, body_html, body_text = render_event_email(event, ctx)
     ok, error = send_email(to, subject, body_html, body_text, sm=sm, event=event, status='test')
     return ok, error
+
+
+def send_event_test(event_code, to_email, context=None):
+    """Enviar una prueba de una plantilla de evento concreta a un correo indicado."""
+    from .models import NotificationEvent
+    try:
+        event = NotificationEvent.objects.get(code=event_code, is_active=True)
+    except NotificationEvent.DoesNotExist:
+        return False, _('Evento de notificación no encontrado')
+    ctx = sample_context(event)
+    if context:
+        ctx.update(context)
+    subject, body_html, body_text = render_event_email(event, ctx)
+    return send_email(to_email, subject, body_html, body_text, event=event, status='test')

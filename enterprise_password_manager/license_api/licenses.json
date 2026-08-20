@@ -2,7 +2,7 @@
   {
     "empresa": "Socia",
     "licencia": "LIC-ACME-7F3A9C",
-    "max_users": 70,
+    "max_users": 45,
     "expires_at": "2026-12-31T23:59:59",
     "installation_id": "",
     "active": true,

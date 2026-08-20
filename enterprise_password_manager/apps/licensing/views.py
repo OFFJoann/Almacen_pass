@@ -34,6 +34,9 @@ def license_view(request):
             lic.license_key = key
             lic.api_url = api_url
 
+        old_max = lic.max_users
+        old_exp = lic.expires_at
+        old_valid = lic.is_valid
         valid, payload, error = lic.verify()
         if valid:
             lic.max_users = payload.get('max_users')
@@ -44,13 +47,17 @@ def license_view(request):
             lic.last_checked_at = timezone.now()
             if action != 'revalidate':
                 lic.activated_at = timezone.now()
+            changed = (old_max != lic.max_users) or (old_exp != lic.expires_at) or (not old_valid)
+            from .notifications import evaluate_license_notifications
+            evaluate_license_notifications(lic, updated=changed)
             lic.save()
             messages.success(request, _('Licencia validada correctamente.'))
         else:
             lic.is_valid = False
             lic.error = error
             lic.last_checked_at = timezone.now()
-            lic.save(update_fields=['is_valid', 'error', 'last_checked_at'])
+            lic.expiry_alert_sent = False
+            lic.save(update_fields=['is_valid', 'error', 'last_checked_at', 'expiry_alert_sent'])
             messages.error(request, _('La licencia no es válida: %s') % error)
         return redirect('licensing:license')
 
