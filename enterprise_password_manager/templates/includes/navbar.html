@@ -33,6 +33,9 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li><a class="dropdown-item" href="{% url 'authentication:setup_mfa' %}"><i class="bi bi-shield-check"></i> Configuración MFA</a></li>
+                    {% if user.can_manage_users %}
+                    <li><a class="dropdown-item" href="{% url 'authentication:emergency_contact' %}"><i class="bi bi-person-badge"></i> Contacto de Emergencia</a></li>
+                    {% endif %}
                     <li><a class="dropdown-item" href="{% url 'audit:my_activity' %}"><i class="bi bi-activity"></i> Mi Actividad</a></li>
                     {% if allow_export %}
                     <li><a class="dropdown-item" href="{% url 'passwords:export' %}?format=json"><i class="bi bi-download"></i> Exportar mis datos</a></li>

@@ -279,40 +279,76 @@ def logout_view(request):
 @login_required
 def setup_mfa(request):
     user = request.user
-    if user.mfa_enabled:
-        messages.info(request, _('MFA ya está activado'))
-        return redirect('passwords:vault')
 
-    if not user.mfa_secret:
-        user.mfa_secret = pyotp.random_base32()
-        user.save()
+    if request.GET.get('cancel') == '1':
+        # Cancelar la reconfiguración: se borra el estado en sesión y se
+        # conserva el secreto MFA anterior (nunca se sobrescribe hasta verificar).
+        request.session.pop('mfa_pending_secret', None)
+        request.session.pop('mfa_reconfiguring', None)
+        return redirect('authentication:setup_mfa')
 
-    totp = pyotp.TOTP(user.mfa_secret)
-    provisioning_uri = totp.provisioning_uri(user.email, issuer_name='TICO BOX')
+    reconfigure = bool(request.session.get('mfa_reconfiguring')) and user.mfa_enabled
+    if request.GET.get('reconfigure') == '1' and user.mfa_enabled:
+        reconfigure = True
+        request.session['mfa_reconfiguring'] = True
 
-    qr = qrcode.make(provisioning_uri)
-    buffer = io.BytesIO()
-    qr.save(buffer, format='PNG')
-    buffer.seek(0)
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    if reconfigure:
+        # Reconfigurar: generamos un secreto nuevo pero NO sobrescribimos el
+        # actual hasta verificar el código (evita quedarse bloqueado si abandona).
+        pending_secret = request.session.get('mfa_pending_secret')
+        if not pending_secret:
+            pending_secret = pyotp.random_base32()
+            request.session['mfa_pending_secret'] = pending_secret
+        secret_to_show = pending_secret
+        show_setup = True
+    elif user.mfa_enabled:
+        # Ya activado y solo consulta el estado: no mostramos el QR.
+        show_setup = False
+        secret_to_show = None
+    else:
+        if not user.mfa_secret:
+            user.mfa_secret = pyotp.random_base32()
+            user.save()
+        secret_to_show = user.mfa_secret
+        show_setup = True
 
-    if request.method == 'POST':
+    qr_base64 = None
+    if show_setup:
+        totp = pyotp.TOTP(secret_to_show)
+        provisioning_uri = totp.provisioning_uri(user.email, issuer_name='TICO BOX')
+        qr = qrcode.make(provisioning_uri)
+        buffer = io.BytesIO()
+        qr.save(buffer, format='PNG')
+        buffer.seek(0)
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    else:
+        totp = None
+
+    if request.method == 'POST' and show_setup:
         form = MFASetupForm(request.POST)
-        if form.is_valid():
-            if totp.verify(form.cleaned_data['code']):
-                user.mfa_enabled = True
-                user.save()
-                messages.success(request, _('MFA se ha activado exitosamente'))
-                return redirect('passwords:vault')
+        if form.is_valid() and totp and totp.verify(form.cleaned_data['code']):
+            user.mfa_secret = secret_to_show
+            user.mfa_enabled = True
+            user.save()
+            request.session.pop('mfa_pending_secret', None)
+            request.session.pop('mfa_reconfiguring', None)
+            if reconfigure:
+                messages.success(request, _('MFA se ha reconfigurado exitosamente'))
             else:
-                messages.error(request, _('Código inválido. Intenta de nuevo'))
+                messages.success(request, _('MFA se ha activado exitosamente'))
+            return redirect('passwords:vault')
+        else:
+            messages.error(request, _('Código inválido. Intenta de nuevo'))
     else:
         form = MFASetupForm()
 
     return render(request, 'authentication/setup_mfa.html', {
         'form': form,
         'qr_code': qr_base64,
-        'secret': user.mfa_secret,
+        'secret': secret_to_show,
+        'show_setup': show_setup,
+        'reconfigure': reconfigure,
+        'mfa_enabled': user.mfa_enabled,
     })
 
 
@@ -485,10 +521,14 @@ def set_emergency_contact(request):
     if request.method == 'POST':
         form = EmergencyContactForm(request.POST)
         if form.is_valid():
+            already = user.has_emergency_contact()
             user.emergency_contact_name = form.cleaned_data['emergency_contact_name'].strip()
             user.emergency_contact_email = form.cleaned_data['emergency_contact_email'].strip().lower()
             user.save()
-            messages.success(request, _('Contacto de emergencia registrado exitosamente.'))
+            if already:
+                messages.success(request, _('Contacto de emergencia actualizado exitosamente.'))
+            else:
+                messages.success(request, _('Contacto de emergencia registrado exitosamente.'))
             return redirect('passwords:vault')
     else:
         form = EmergencyContactForm(initial={
@@ -496,4 +536,7 @@ def set_emergency_contact(request):
             'emergency_contact_email': user.emergency_contact_email,
         })
 
-    return render(request, 'authentication/emergency_contact.html', {'form': form})
+    return render(request, 'authentication/emergency_contact.html', {
+        'form': form,
+        'has_contact': user.has_emergency_contact(),
+    })

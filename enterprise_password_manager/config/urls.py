@@ -22,8 +22,10 @@ urlpatterns = [
     path('api/passwords/', include('apps.passwords.api_urls')),
     path('api/users/', include('apps.users.api_urls')),
     path('api/audit/', include('apps.audit.api_urls')),
-    path('__debug__/', include('debug_toolbar.urls')),
 ]
+
+if 'debug_toolbar' in settings.INSTALLED_APPS:
+    urlpatterns += [path('__debug__/', include('debug_toolbar.urls'))]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -12,6 +12,8 @@ SECRET_KEY = config('SECRET_KEY', default='insecure-dev-key-change-in-production
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if o.strip()]
+
 # URL base donde se sirve el servicio FastAPI de reportes (Swagger en /docs).
 API_REPORTS_BASE_URL = config('API_REPORTS_BASE_URL', default='http://127.0.0.1:8001')
 

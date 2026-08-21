@@ -8,10 +8,15 @@
     <div class="col-md-6">
         <div class="card shadow-sm">
             <div class="card-body p-4">
-                <h4 class="mb-2"><i class="bi bi-shield-plus"></i> Contacto de Emergencia</h4>
+                <h4 class="mb-2"><i class="bi bi-person-badge"></i> {% if has_contact %}Cambiar Contacto de Emergencia{% else %}Contacto de Emergencia{% endif %}</h4>
                 <p class="text-muted mb-4">
-                    Los administradores deben registrar un contacto de confianza. Si olvidas tu contraseña,
-                    se enviará una notificación de recuperación al correo de este contacto.
+                    {% if has_contact %}
+                        Ya tienes un contacto de emergencia registrado. Puedes actualizar sus datos a continuación.
+                        Si olvidas tu contraseña, se enviará una notificación de recuperación al correo de este contacto.
+                    {% else %}
+                        Los administradores deben registrar un contacto de confianza. Si olvidas tu contraseña,
+                        se enviará una notificación de recuperación al correo de este contacto.
+                    {% endif %}
                 </p>
                 <form method="post" novalidate>
                     {% csrf_token %}
@@ -26,7 +31,7 @@
                         {% if form.emergency_contact_email.errors %}<div class="text-danger small">{{ form.emergency_contact_email.errors }}</div>{% endif %}
                     </div>
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg"></i> Guardar Contacto de Emergencia
+                        <i class="bi bi-check-lg"></i> {% if has_contact %}Actualizar Contacto{% else %}Guardar Contacto de Emergencia{% endif %}
                     </button>
                     <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary">Cancelar</a>
                 </form>

@@ -42,11 +42,16 @@ def get_smtp_backend(sm=None):
         return None
     use_tls = sm.encryption == 'tls'
     use_ssl = sm.encryption == 'ssl'
+    try:
+        password = sm.get_password()
+    except Exception as exc:
+        logger.warning('No se pudo descifrar la contraseña SMTP, se omitirá el envío: %s', exc)
+        return None
     return EmailBackend(
         host=sm.host,
         port=sm.port,
         username=sm.username,
-        password=sm.get_password(),
+        password=password,
         use_tls=use_tls,
         use_ssl=use_ssl,
         timeout=sm.timeout,
