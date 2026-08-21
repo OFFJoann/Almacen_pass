@@ -364,7 +364,9 @@ def entry_delete(request, pk):
         }, recipients=[request.user.email])
 
         messages.success(request, _('Contraseña movida a la papelera'))
-    return redirect('passwords:vault')
+        return redirect('passwords:vault')
+
+    return render(request, 'passwords/entry_confirm_delete.html', {'entry': entry})
 
 
 @login_required

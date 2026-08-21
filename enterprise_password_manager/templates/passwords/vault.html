@@ -140,10 +140,7 @@
                                                     <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
                                                     <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
                                                     <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
-                                                    <form method="post" action="{% url 'passwords:entry_delete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Mover a la papelera?')">
-                                                        {% csrf_token %}
-                                                        <button type="submit" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
-                                                    </form>
+                                                    <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
                                                 </div>
                                                 <div class="btn-group btn-group-sm" role="group">
                                                     <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Copiar"><i class="bi bi-clipboard"></i></button>

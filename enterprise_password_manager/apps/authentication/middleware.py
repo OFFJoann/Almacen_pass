@@ -31,7 +31,7 @@ class RequireLoginMiddleware:
         if not request.path.startswith(PUBLIC_PREFIXES):
             if not request.user.is_authenticated:
                 login_url = reverse(settings.LOGIN_URL)
-                return redirect(f'{login_url}?next={request.path}')
+                return redirect(f'{login_url}?next={request.path}', permanent=True)
         return self.get_response(request)
 
 
