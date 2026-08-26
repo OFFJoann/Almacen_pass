@@ -1,6 +1,6 @@
 // TICO BOX - background (service worker MV3)
-const DEFAULT_SERVER_URL = 'http://localhost:8001';
-const LEGACY_DEFAULT_SERVER_URL = 'http://localhost:8000';
+const DEFAULT_SERVER_URL = 'http://localhost:8080';
+const LEGACY_DEFAULT_SERVER_URL = 'http://localhost:8080';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.get(['serverUrl']).then((s) => {
@@ -126,6 +126,7 @@ async function doLogout() {
   try { await request('/auth/token/logout/', { method: 'POST', headers }); } catch (e) { /* ignore */ }
   await chrome.storage.local.remove(['token', 'email', 'full_name', 'sessionId']);
   await chrome.action.setBadgeText({ text: '' });
+  try { chrome.runtime.sendMessage({ type: 'sessionChanged', loggedIn: false }); } catch (e) { /* ignore */ }
   return { ok: true };
 }
 
@@ -171,7 +172,7 @@ async function checkSession() {
   }
 }
 
-chrome.alarms.create('sessionCheck', { periodInMinutes: 1 });
+chrome.alarms.create('sessionCheck', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'sessionCheck') checkSession();
 });

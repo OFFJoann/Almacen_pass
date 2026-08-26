@@ -3,6 +3,22 @@
 
 {% block title %}Mi Bóveda - Administrador de Contraseñas{% endblock %}
 
+{% block extra_css %}
+<style>
+    .vault-scroll {
+        max-height: 520px;
+        overflow-y: auto;
+    }
+    .vault-scroll .table thead th {
+        position: sticky;
+        top: 0;
+        background: var(--bs-body-bg);
+        z-index: 2;
+        box-shadow: inset 0 -1px 0 var(--bs-border-color);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-key-fill"></i> Mi Bóveda</h4>
@@ -92,7 +108,7 @@
                 </div>
 
                 {% if entries %}
-                    <div class="table-responsive" data-tour="entry-actions">
+                    <div class="table-responsive vault-scroll" data-tour="entry-actions">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -140,6 +156,7 @@
                                                     <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
                                                     <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
                                                     <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
+                                                    <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}')"><i class="bi bi-folder-symlink"></i></button>
                                                     <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
                                                 </div>
                                                 <div class="btn-group btn-group-sm" role="group">
@@ -197,7 +214,7 @@
                     <h6 class="mb-0"><i class="bi bi-people"></i> Compartidas Conmigo</h6>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive">
+                    <div class="table-responsive vault-scroll">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -243,6 +260,30 @@
         {% endif %}
     </div>
 </div>
+
+<div class="modal fade" id="moveFolderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-folder-symlink"></i> Mover a carpeta</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">Selecciona la carpeta destino</label>
+                <select class="form-select" id="moveFolderSelect">
+                    <option value="">Sin carpeta</option>
+                    {% for f in folders %}
+                        <option value="{{ f.id }}">{{ f.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="moveFolderConfirm">Mover</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -264,6 +305,35 @@
         }
     }
 
+    let moveEntryPk = null;
+    function openMoveModal(pk) {
+        moveEntryPk = pk;
+        document.getElementById('moveFolderSelect').value = '';
+        new bootstrap.Modal(document.getElementById('moveFolderModal')).show();
+    }
+    document.getElementById('moveFolderConfirm').addEventListener('click', function () {
+        if (!moveEntryPk) return;
+        const folderId = document.getElementById('moveFolderSelect').value;
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch('/vault/entry/' + moveEntryPk + '/move-folder/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'folder=' + encodeURIComponent(folderId)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.status === 'ok') {
+                const m = bootstrap.Modal.getInstance(document.getElementById('moveFolderModal'));
+                if (m) m.hide();
+                showToast('Registro movido de carpeta', 'success');
+                location.reload();
+            } else {
+                showToast(data.message || 'No se pudo mover', 'danger');
+            }
+        })
+        .catch(function () { showToast('No se pudo mover', 'danger'); });
+    });
+
     {% if show_onboarding %}
     // ---------- Tour de bienvenida ----------
     (function () {
@@ -280,7 +350,7 @@
             },
             {
                 selector: '[data-tour="share-requests"]',
-                title: 'Re-comparticiones',
+                title: 'Compartidas',
                 text: 'Aquí gestionas las solicitudes para volver a compartir accesos contigo y las solicitudes pendientes de otros usuarios.',
             },
             {

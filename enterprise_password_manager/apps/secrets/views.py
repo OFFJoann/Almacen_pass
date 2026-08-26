@@ -76,7 +76,11 @@ def secret_edit(request, pk):
     if request.method == 'POST':
         form = form_class(request.POST, secret_type=secret.type, instance=secret)
         if form.is_valid():
-            form.save()
+            old_expires = secret.expires_at
+            secret = form.save(commit=False)
+            if secret.expires_at != old_expires:
+                secret.expiry_notified_at = None
+            secret.save()
             messages.success(request, _('Secreto actualizado exitosamente.'))
             return redirect('secrets:list')
     else:

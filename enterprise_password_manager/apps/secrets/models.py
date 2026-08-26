@@ -37,6 +37,8 @@ class Secret(models.Model):
     obsoleted_at = models.DateTimeField(_('marcado obsoleto el'), null=True, blank=True)
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
+    expires_at = models.DateTimeField(_('fecha de vencimiento'), null=True, blank=True)
+    expiry_notified_at = models.DateTimeField(_('notificado el'), null=True, blank=True)
 
     class Meta:
         verbose_name = _('secreto')
@@ -45,6 +47,11 @@ class Secret(models.Model):
 
     def __str__(self):
         return self.name
+
+    def is_expired(self):
+        if self.expires_at and timezone.now() > self.expires_at:
+            return True
+        return False
 
     def set_data(self, data_dict):
         raw = json.dumps(data_dict)

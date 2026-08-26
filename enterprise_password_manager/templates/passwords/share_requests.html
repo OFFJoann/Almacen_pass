@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Solicitudes de re-compartición{% endblock %}
+{% block title %}Gestión de recursos compartidos{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0"><i class="bi bi-share"></i> Solicitudes de Re-Compartición</h4>
+        <h4 class="mb-0"><i class="bi bi-share"></i> Gestión de recursos compartidos</h4>
         <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a la Bóveda</a>
     </div>
 
@@ -30,7 +30,7 @@
                                     {% csrf_token %}
                                     <button class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Aprobar</button>
                                 </form>
-                                <form method="post" action="{% url 'passwords:share_request_deny' req.pk %}" class="d-inline" onsubmit="return confirm('¿Denegar esta solicitud de re-compartición?')">
+                                <form method="post" action="{% url 'passwords:share_request_deny' req.pk %}" class="d-inline" onsubmit="return confirm('¿Denegar este recurso compartido?')">
                                     {% csrf_token %}
                                     <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i> Denegar</button>
                                 </form>
@@ -103,7 +103,7 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-muted text-center py-3 mb-0">Aún no has enviado solicitudes de re-compartición.</p>
+            <p class="text-muted text-center py-3 mb-0">Aún no has enviado recursos compartidos.</p>
             {% endif %}
         </div>
     </div>

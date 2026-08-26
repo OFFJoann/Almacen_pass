@@ -182,7 +182,19 @@ $('loginBtn').addEventListener('click', async () => {
 
 $('logoutBtn').addEventListener('click', async () => {
   await send({ type: 'logout' });
+  const res = await send({ type: 'getServerUrl' });
+  if (res.ok && res.serverUrl) {
+    chrome.tabs.create({ url: res.serverUrl + '/auth/login/' });
+  }
   showView('login');
+});
+
+// Si la sesión web o el token se invalidan (logout en la web), el background
+// avisa para refrescar el popup de inmediato en lugar de quedar con el correo viejo.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'sessionChanged' && msg.loggedIn === false) {
+    showView('login');
+  }
 });
 
 $('homeBtn').addEventListener('click', async () => {

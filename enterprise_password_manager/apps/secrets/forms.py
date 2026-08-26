@@ -9,10 +9,14 @@ class SecretForm(forms.ModelForm):
         label=_('Notas'), required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3})
     )
+    expires_at = forms.DateTimeField(
+        label=_('Fecha de vencimiento'), required=False,
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'})
+    )
 
     class Meta:
         model = Secret
-        fields = ['name', 'notes']
+        fields = ['name', 'notes', 'expires_at']
 
     def __init__(self, *args, **kwargs):
         self.secret_type = kwargs.pop('secret_type', None)

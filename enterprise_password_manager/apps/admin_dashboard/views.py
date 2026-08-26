@@ -247,6 +247,50 @@ def obsolete_delete_secret(request, pk):
 
 
 @login_required
+@require_POST
+def obsolete_restore_password(request, pk):
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+    entry = get_object_or_404(PasswordEntry, pk=pk, is_obsolete=True)
+    name = entry.name
+    owner = entry.vault.user.email if entry.vault and entry.vault.user else ''
+    entry.is_obsolete = False
+    entry.obsoleted_at = None
+    entry.save(update_fields=['is_obsolete', 'obsoleted_at'])
+    AuditLog.objects.create(
+        user=request.user,
+        action='PASSWORD_RESTORED',
+        details=f'Admin restored obsolete password to owner vault: {name} (owner: {owner})',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(request, _('Contraseña devuelta a la bóveda de su dueño'))
+    return redirect('admin_dashboard:obsolete')
+
+
+@login_required
+@require_POST
+def obsolete_restore_secret(request, pk):
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+    secret = get_object_or_404(Secret, pk=pk, is_obsolete=True)
+    name = secret.name
+    owner = secret.user.email if secret.user else ''
+    secret.is_obsolete = False
+    secret.obsoleted_at = None
+    secret.save(update_fields=['is_obsolete', 'obsoleted_at'])
+    AuditLog.objects.create(
+        user=request.user,
+        action='SECRET_RESTORED',
+        details=f'Admin restored obsolete secret to owner vault: {name} (owner: {owner})',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(request, _('Secreto devuelto a la bóveda de su dueño'))
+    return redirect('admin_dashboard:obsolete')
+
+
+@login_required
 def backup_page(request):
     if not request.user.can_manage_users():
         raise PermissionDenied

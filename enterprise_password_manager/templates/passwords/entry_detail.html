@@ -31,9 +31,9 @@
                             </a>
                         {% endif %}
                         {% if not user_share %}
-                            <form method="post" action="{% url 'passwords:entry_mark_obsolete' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Marcar esta contraseña como obsoleta? Se moverá al módulo de obsoletos y no podrá eliminarse sin permiso.')">
+                            <form method="post" id="obsolete-entry-{{ entry.pk }}" action="{% url 'passwords:entry_mark_obsolete' entry.pk %}" class="d-inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline-warning btn-sm" title="Marcar como obsoleta"><i class="bi bi-shield-exclamation"></i></button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" title="Marcar como obsoleta" onclick="ticoConfirm('¿Marcar esta contraseña como obsoleta? Se moverá al módulo de obsoletos y no podrá eliminarse sin permiso de un administrador.', 'obsolete-entry-{{ entry.pk }}')"><i class="bi bi-shield-exclamation"></i></button>
                             </form>
                             <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger btn-sm" title="Eliminar"><i class="bi bi-trash"></i></a>
                         {% endif %}
@@ -151,7 +151,7 @@
 
         {% if is_owner and pending_share_requests %}
         <div class="card shadow-sm mb-3">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Solicitudes de re-compartición</h6></div>
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Gestión de recursos compartidos</h6></div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for req in pending_share_requests %}
