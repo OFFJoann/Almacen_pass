@@ -935,6 +935,21 @@ def import_passwords(request):
 
 @login_required
 def export_passwords(request):
+    # Los usuarios que iniciaron sesión por SSO deben reconfirmar su identidad
+    # (step-up) antes de exportar datos sensibles, para asegurar que son ellos.
+    if request.session.get('auth_method') == 'sso':
+        reauth_at = request.session.get('export_reauthed_at')
+        recent = False
+        if reauth_at:
+            try:
+                dt = timezone.datetime.fromisoformat(reauth_at)
+                recent = (timezone.now() - dt).total_seconds() < 600
+            except Exception:
+                recent = False
+        if not recent:
+            request.session['pending_export_reauth'] = True
+            return redirect('sso:login')
+
     from apps.users.models import get_user_effective_policy
     policy = get_user_effective_policy(request.user)
     if not policy.get('allow_export', True):
@@ -1031,6 +1046,30 @@ def _log_export(request, password_count, secret_count):
 
 
 @login_required
+@login_required
+@require_POST
+def entry_move_folder(request, pk):
+    entry = get_object_or_404(
+        PasswordEntry.objects.filter(vault__user=request.user, is_deleted=False, is_obsolete=False),
+        pk=pk,
+    )
+    folder_id = request.POST.get('folder', '').strip()
+    folder = None
+    if folder_id:
+        folder = get_object_or_404(Folder, pk=folder_id, user=request.user)
+    entry.folder = folder
+    entry.save(update_fields=['folder', 'updated_at'])
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='ENTRY_MOVED',
+        details=f'Moved entry "{entry.name}" to folder "{folder.name if folder else "Sin carpeta"}"',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    return JsonResponse({'status': 'ok', 'folder': folder.name if folder else ''})
+
+
 def folder_create(request):
     if request.method == 'POST':
         form = FolderForm(request.POST, user=request.user)

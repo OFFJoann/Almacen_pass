@@ -239,6 +239,7 @@ def sso_callback(request):
         )
 
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+        request.session['auth_method'] = 'sso'
         ActiveSession.objects.update_or_create(
             user=user, session_key=request.session.session_key,
             defaults={
@@ -265,6 +266,13 @@ def sso_callback(request):
         User.objects.filter(pk=user.pk).update(failed_local_attempts=0)
 
         messages.success(request, _(f'¡Bienvenido, {user.full_name}!'))
+
+        # Re-autenticación paso-a-paso (step-up) para exportar datos: si venimos
+        # de una solicitud de exportación de un usuario SSO, la cumplimos y volvemos.
+        if request.session.pop('pending_export_reauth', False):
+            request.session['export_reauthed_at'] = timezone.now().isoformat()
+            return redirect('passwords:export')
+
         return redirect('passwords:vault')
 
     except Exception as e:

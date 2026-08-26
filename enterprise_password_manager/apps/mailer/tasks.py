@@ -45,6 +45,49 @@ def check_expired_passwords():
     return notified
 
 
+def check_expired_secrets():
+    """Notify the owner (personal event) for each expired secret."""
+    from apps.secrets.models import Secret
+    from .services import notify_event
+
+    now = timezone.now()
+    secrets = Secret.objects.filter(
+        is_deleted=False,
+        is_obsolete=False,
+        expires_at__isnull=False,
+        expires_at__lte=now,
+        expiry_notified_at__isnull=True,
+    ).select_related('user')
+
+    notified = 0
+    for secret in secrets:
+        email = secret.user.email
+        if not email:
+            continue
+        sent = notify_event('secret_expired', {
+            'usuario': email,
+            'nombre_secreto': secret.name,
+            'tipo': secret.get_type_display(),
+            'fecha': now.date().isoformat(),
+            'hora': now.time().strftime('%H:%M'),
+        }, recipients=[email])
+        if sent:
+            secret.expiry_notified_at = timezone.now()
+            secret.save(update_fields=['expiry_notified_at'])
+            notified += 1
+    if notified:
+        from apps.audit.models import AuditLog
+        AuditLog.objects.create(
+            user=None,
+            action='SETTINGS_CHANGED',
+            details=_('Se notificaron %(count)s secreto(s) vencido(s).') % {'count': notified},
+            result='success',
+        )
+    return notified
+
+
 @shared_task
 def check_expired_passwords_task():
-    return check_expired_passwords()
+    n1 = check_expired_passwords()
+    n2 = check_expired_secrets()
+    return n1 + n2

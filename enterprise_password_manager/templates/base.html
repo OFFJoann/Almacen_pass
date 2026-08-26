@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="{{ current_theme }}">
+<html lang="en" data-bs-theme="{% block theme %}{{ current_theme }}{% endblock %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,6 +38,22 @@
         {% include 'includes/messages.html' %}
         {% block auth_content %}{% endblock %}
     {% endif %}
+
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="confirmModalTitle">Confirmar acción</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cancelar"></button>
+                </div>
+                <div class="modal-body" id="confirmModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" id="confirmModalOk">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12/dist/htmx.min.js"></script>
@@ -110,6 +126,23 @@
             document.getElementById('mainContent').classList.toggle('sidebar-collapsed');
             document.getElementById('sidebar').classList.toggle('collapsed');
         }
+        let _confirmForm = null;
+        function ticoConfirm(message, formId, okClass) {
+            document.getElementById('confirmModalBody').textContent = message;
+            document.getElementById('confirmModalTitle').textContent = 'Confirmar acción';
+            const okBtn = document.getElementById('confirmModalOk');
+            okBtn.className = 'btn ' + (okClass || 'btn-danger');
+            _confirmForm = formId || null;
+            new bootstrap.Modal(document.getElementById('confirmModal')).show();
+        }
+        document.getElementById('confirmModalOk').addEventListener('click', function () {
+            if (_confirmForm) {
+                const f = document.getElementById(_confirmForm);
+                if (f) f.submit();
+            }
+            const m = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+            if (m) m.hide();
+        });
     </script>
 </body>
 </html>

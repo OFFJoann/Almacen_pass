@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
+{% block theme %}light{% endblock %}
 {% block body_class %}bg-light{% endblock %}
 
 {% block auth_content %}
@@ -9,45 +10,51 @@
         <div class="col-md-5">
             <div class="text-center mb-4">
                 <i class="bi bi-shield-lock-fill display-1 text-primary"></i>
-                <h2 class="mt-2">Administrador de Contraseñas</h2>
+                <h2 class="mt-2">Tico Box</h2>
                 <p class="text-muted">Acceso seguro a tus credenciales</p>
             </div>
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4">
-                    <h4 class="card-title text-center mb-4">Iniciar Sesión</h4>
-                    <form method="post" novalidate>
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label">Correo Electrónico</label>
-                            {{ form.username }}
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Contraseña</label>
-                            {{ form.password }}
-                        </div>
-                        <div class="mb-3 form-check">
-                            {{ form.remember_me }}
-                            <label class="form-check-label" for="id_remember_me">Recordarme</label>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 btn-lg mb-3">
-                            <i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión
-                        </button>
+                    {% if sso_enabled %}
+                        <a href="{% url 'sso:login' %}" class="btn btn-primary w-100 btn-lg mb-3">
+                            <i class="fab fa-microsoft"></i> Iniciar sesión con Microsoft
+                        </a>
                         <div class="text-center mb-3">
-                            <a href="{% url 'authentication:password_reset_request' %}" class="text-decoration-none">
-                                <i class="bi bi-key"></i> ¿Olvidaste tu contraseña?
-                            </a>
+                            <button type="button" id="other-methods-btn" class="btn btn-link text-decoration-none p-0" onclick="document.getElementById('local-login').classList.remove('d-none'); this.style.display='none';">
+                                Otros métodos
+                            </button>
                         </div>
-                        {% if sso_enabled %}
-                            <hr>
-                            <a href="{% url 'sso:login' %}" class="btn btn-outline-dark w-100">
-                                <i class="fab fa-microsoft"></i> Iniciar sesión con Microsoft
-                            </a>
-                        {% endif %}
-                    </form>
+                    {% endif %}
+                    <div id="local-login" class="{% if sso_enabled %}d-none{% endif %}">
+                        <h4 class="card-title text-center mb-4">Iniciar Sesión</h4>
+                        <form method="post" novalidate>
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label class="form-label">Correo Electrónico</label>
+                                {{ form.username }}
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Contraseña</label>
+                                {{ form.password }}
+                            </div>
+                            <div class="mb-3 form-check">
+                                {{ form.remember_me }}
+                                <label class="form-check-label" for="id_remember_me">Recordarme</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 btn-lg mb-3">
+                                <i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión
+                            </button>
+                            <div class="text-center mb-3">
+                                <a href="{% url 'authentication:password_reset_request' %}" class="text-decoration-none">
+                                    <i class="bi bi-key"></i> ¿Olvidaste tu contraseña?
+                                </a>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
             <p class="text-center text-muted mt-3">
-                <small>&copy; {% now 'Y' %} Administrador de Contraseñas. Todos los derechos reservados.</small>
+                <small>&copy; {% now 'Y' %} Tico Box. Todos los derechos reservados.</small>
             </p>
         </div>
     </div>

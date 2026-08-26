@@ -11,7 +11,7 @@
 
 <div class="alert alert-danger d-flex align-items-center" role="alert">
     <i class="bi bi-exclamation-triangle me-2"></i>
-    <div>Los registros obsoletos no pueden devolverse a sus dueños. Eliminarlos es <strong>permanente</strong> y no se puede deshacer.</div>
+    <div>Los registros obsoletos pueden <strong>devolverse a la bóveda de su dueño</strong> o eliminarse de forma <strong>permanente</strong> (no se puede deshacer).</div>
 </div>
 
 <div class="card shadow-sm mb-4">
@@ -58,9 +58,13 @@
                             <td><small class="text-muted">{{ entry.vault.user.email|default:'—' }}</small></td>
                             <td><small class="text-muted">{{ entry.obsoleted_at|date:'Y-m-d H:i' }}</small></td>
                             <td>
-                                <form method="post" action="{% url 'admin_dashboard:obsolete_delete_password' entry.pk %}" class="d-inline" onsubmit="return confirm('¿Eliminar permanentemente la contraseña «{{ entry.name }}»? Esta acción no se puede deshacer.')">
+                                <form method="post" id="restore-pw-{{ entry.pk }}" action="{% url 'admin_dashboard:obsolete_restore_password' entry.pk %}" class="d-inline">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash-fill"></i> Eliminar</button>
+                                    <button type="button" class="btn btn-outline-success btn-sm" title="Devolver a la bóveda del dueño" onclick="ticoConfirm('¿Devolver la contraseña «{{ entry.name|escapejs }}» a la bóveda de su dueño?', 'restore-pw-{{ entry.pk }}', 'btn-success')"><i class="bi bi-arrow-return-left"></i> Devolver</button>
+                                </form>
+                                <form method="post" id="delete-pw-{{ entry.pk }}" action="{% url 'admin_dashboard:obsolete_delete_password' entry.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="ticoConfirm('¿Eliminar permanentemente la contraseña «{{ entry.name|escapejs }}»? Esta acción no se puede deshacer.', 'delete-pw-{{ entry.pk }}')"><i class="bi bi-trash-fill"></i> Eliminar</button>
                                 </form>
                             </td>
                         </tr>
@@ -95,9 +99,13 @@
                             <td><small class="text-muted">{{ secret.user.email|default:'—' }}</small></td>
                             <td><small class="text-muted">{{ secret.obsoleted_at|date:'Y-m-d H:i' }}</small></td>
                             <td>
-                                <form method="post" action="{% url 'admin_dashboard:obsolete_delete_secret' secret.pk %}" class="d-inline" onsubmit="return confirm('¿Eliminar permanentemente el secreto «{{ secret.name }}»? Esta acción no se puede deshacer.')">
+                                <form method="post" id="restore-sc-{{ secret.pk }}" action="{% url 'admin_dashboard:obsolete_restore_secret' secret.pk %}" class="d-inline">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash-fill"></i> Eliminar</button>
+                                    <button type="button" class="btn btn-outline-success btn-sm" title="Devolver a la bóveda del dueño" onclick="ticoConfirm('¿Devolver el secreto «{{ secret.name|escapejs }}» a la bóveda de su dueño?', 'restore-sc-{{ secret.pk }}', 'btn-success')"><i class="bi bi-arrow-return-left"></i> Devolver</button>
+                                </form>
+                                <form method="post" id="delete-sc-{{ secret.pk }}" action="{% url 'admin_dashboard:obsolete_delete_secret' secret.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="ticoConfirm('¿Eliminar permanentemente el secreto «{{ secret.name|escapejs }}»? Esta acción no se puede deshacer.', 'delete-sc-{{ secret.pk }}')"><i class="bi bi-trash-fill"></i> Eliminar</button>
                                 </form>
                             </td>
                         </tr>
