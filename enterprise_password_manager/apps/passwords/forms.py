@@ -25,7 +25,7 @@ class PasswordEntryForm(forms.ModelForm):
 
     class Meta:
         model = PasswordEntry
-        fields = ['name', 'url', 'folder', 'category', 'tags', 'sensitivity',
+        fields = ['name', 'url', 'folder', 'category', 'sensitivity',
                    'is_favorite', 'expires_at']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -44,9 +44,13 @@ class PasswordEntryForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.user = user
         if user:
+            from .models import folder_tree_for_user, flatten_folder_tree
             self.fields['folder'].queryset = Folder.objects.filter(user=user)
+            flat = flatten_folder_tree(folder_tree_for_user(user))
+            self.fields['folder'].choices = [('', '---------')] + [
+                (it['folder'].id, it['prefix'] + it['folder'].name) for it in flat
+            ]
             self.fields['category'].queryset = Category.objects.filter(user=user)
-            self.fields['tags'].queryset = Tag.objects.filter(user=user)
 
     def clean_password(self):
         pwd = self.cleaned_data.get('password', '')
@@ -65,7 +69,7 @@ class PasswordEntryForm(forms.ModelForm):
 class FolderForm(forms.ModelForm):
     class Meta:
         model = Folder
-        fields = ['name', 'parent', 'icon', 'color']
+        fields = ['name', 'parent', 'color']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'parent': forms.Select(attrs={'class': 'form-control'}),
@@ -83,7 +87,7 @@ class FolderForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
-        fields = ['name', 'icon', 'color']
+        fields = ['name', 'color']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'icon': forms.TextInput(attrs={'class': 'form-control'}),

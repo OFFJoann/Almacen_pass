@@ -5,6 +5,7 @@ app_name = 'passwords'
 
 urlpatterns = [
     path('', views.vault_view, name='vault'),
+    path('entries/partial/', views.vault_entries_partial, name='vault_entries_partial'),
     path('dashboard/', views.user_dashboard, name='dashboard'),
     path('entry/create/', views.entry_create, name='entry_create'),
     path('entry/<uuid:pk>/', views.entry_detail, name='detail'),
