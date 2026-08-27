@@ -15,3 +15,13 @@ def check_license_expiry_task():
     if lic.expiry_alert_sent != before:
         lic.save(update_fields=['expiry_alert_sent'])
     return lic.expiry_alert_sent
+
+
+@shared_task
+def sync_license_task():
+    """Sincronización automática de la licencia con la API del proveedor (cada hora)."""
+    lic = License.get_instance()
+    if not lic.license_key or not lic.company:
+        return 'no-license'
+    valid, error = lic.sync()
+    return 'synced' if valid else f'invalid:{error}'

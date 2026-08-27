@@ -98,3 +98,31 @@ class UpdateActivityMiddleware:
                     last_activity=timezone.now()
                 )
         return self.get_response(request)
+
+
+class ForcePasswordChangeMiddleware:
+    """Obliga a cambiar la contraseña temporal/forzada antes de navegar.
+
+    Si el usuario autenticado tiene force_password_change=True, cualquier
+    solicitud (salvo la propia página de cambio, el logout y la verificación
+    MFA para completar el login) lo redirige a la página de cambio.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        if user is not None and user.is_authenticated and getattr(user, 'force_password_change', False):
+            path = request.path
+            # No redirigir peticiones de estáticos/media/api para no romper el render.
+            if path.startswith(('/static/', '/media/', '/api/', '/__debug__/')):
+                return self.get_response(request)
+            allowed = (
+                reverse('authentication:force_password_change'),
+                reverse('authentication:logout'),
+                reverse('authentication:mfa_verify'),
+            )
+            if path not in allowed:
+                return redirect('authentication:force_password_change')
+        return self.get_response(request)

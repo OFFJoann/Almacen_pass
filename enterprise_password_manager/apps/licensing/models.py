@@ -4,6 +4,13 @@ from django.db import models
 from django.utils import timezone
 
 
+def _parse_dt(value):
+    from django.utils.dateparse import parse_datetime
+    if not value:
+        return None
+    return parse_datetime(value)
+
+
 class Installation(models.Model):
     """Singleton that identifies this deployed instance (used to bind licenses)."""
 
@@ -37,6 +44,10 @@ class License(models.Model):
     issued_at = models.DateTimeField(null=True, blank=True)
     activated_at = models.DateTimeField(null=True, blank=True)
     last_checked_at = models.DateTimeField(null=True, blank=True)
+    sync_interval = models.PositiveIntegerField(
+        default=3600, editable=False,
+        help_text='Intervalo de sincronización automática con la API de licencias, en segundos (fijo, no editable).',
+    )
     is_valid = models.BooleanField(default=False)
     error = models.CharField(max_length=255, blank=True, default='')
     expiry_alert_sent = models.BooleanField(
@@ -76,6 +87,34 @@ class License(models.Model):
         if not data.get('valid'):
             return False, None, data.get('error', 'Licencia inválida')
         return True, data, ''
+
+    def sync(self):
+        """Re-valida la licencia contra la API del proveedor y actualiza los
+        límites guardados. Usado por la vista (activar/revalidar), el botón de
+        sincronización manual y la tarea periódica de Celery."""
+        from .notifications import evaluate_license_notifications
+
+        old_max = self.max_users
+        old_exp = self.expires_at
+        old_valid = self.is_valid
+        valid, payload, error = self.verify()
+        if valid:
+            self.max_users = payload.get('max_users')
+            self.expires_at = _parse_dt(payload.get('expires_at'))
+            self.installation_id = payload.get('installation_id', '') or ''
+            self.is_valid = True
+            self.error = ''
+            self.last_checked_at = timezone.now()
+            changed = (old_max != self.max_users) or (old_exp != self.expires_at) or (not old_valid)
+            evaluate_license_notifications(self, updated=changed)
+            self.save()
+            return True, ''
+        self.is_valid = False
+        self.error = error
+        self.last_checked_at = timezone.now()
+        self.expiry_alert_sent = False
+        self.save(update_fields=['is_valid', 'error', 'last_checked_at', 'expiry_alert_sent'])
+        return False, error
 
     def status(self):
         from django.utils import timezone

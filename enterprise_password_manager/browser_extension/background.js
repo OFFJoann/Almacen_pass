@@ -284,6 +284,14 @@ async function clearPendingQr() {
 async function saveDetected(tabId, data) {
   if (!tabId) return { ok: true };
 
+  // Solo preguntar si la extensión tiene una sesión activa iniciada.
+  // Si no hay sesión (ni token ni sesión web de la que autenticarse),
+  // no se pregunta nada al usuario.
+  const status = await getStatus();
+  if (!status || !status.loggedIn) {
+    return { ok: true };
+  }
+
   // No pedir guardar en la propia bóveda (misma URL/origen que el servidor).
   const serverUrl = await getServerUrl();
   let tabUrl = '';

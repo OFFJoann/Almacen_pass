@@ -128,7 +128,10 @@ def sso_login(request):
         messages.error(request, _('SSO no está configurado'))
         return redirect('authentication:login')
 
-    auth_url = config.get_authorization_url()
+    # Step-up para exportar: forzar que el IdP pida credenciales de nuevo
+    # (si ya hay sesión en Microsoft, sin prompt=login re-autentica en silencio).
+    prompt = 'login' if request.session.get('pending_export_reauth') else None
+    auth_url = config.get_authorization_url(prompt=prompt)
     return redirect(auth_url)
 
 
@@ -197,6 +200,16 @@ def sso_callback(request):
             return _sso_error(
                 request, config, 'NO_EMAIL',
                 f'Microsoft no devolvió un correo. Respuesta Graph: {user_data}',
+            )
+
+        # Brecha de licencia: el login SSO podía crear usuarios nuevos sin
+        # validar el límite. Si el correo aún no existe, sería un usuario nuevo,
+        # así que aplicamos la misma restricción que la creación manual.
+        from apps.licensing.utils import can_create_users, license_block_reason
+        if not User.objects.filter(email=email).exists() and not can_create_users(1):
+            return _sso_error(
+                request, config, 'LICENSE_LIMIT',
+                license_block_reason(),
             )
 
         try:
@@ -268,9 +281,10 @@ def sso_callback(request):
         messages.success(request, _(f'¡Bienvenido, {user.full_name}!'))
 
         # Re-autenticación paso-a-paso (step-up) para exportar datos: si venimos
-        # de una solicitud de exportación de un usuario SSO, la cumplimos y volvemos.
+        # de una solicitud de exportación de un usuario SSO, fijamos la bandera de
+        # un solo uso y volvemos para que la exportación se autorice una sola vez.
         if request.session.pop('pending_export_reauth', False):
-            request.session['export_reauthed_at'] = timezone.now().isoformat()
+            request.session['_export_stepup_done'] = True
             return redirect('passwords:export')
 
         return redirect('passwords:vault')

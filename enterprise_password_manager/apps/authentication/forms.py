@@ -75,12 +75,30 @@ class SetPasswordForm(forms.Form):
     password = forms.CharField(
         label=_('Nueva Contraseña'),
         widget=forms.PasswordInput(attrs={'class': 'form-control'}),
-        min_length=12
     )
     password_confirm = forms.CharField(
         label=_('Confirmar Contraseña'),
         widget=forms.PasswordInput(attrs={'class': 'form-control'})
     )
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        if not password:
+            return password
+        errors = []
+        if len(password) < 12:
+            errors.append(_('Debe tener al menos 12 caracteres.'))
+        if not any(c.isupper() for c in password):
+            errors.append(_('Debe incluir al menos una letra mayúscula.'))
+        if not any(c.islower() for c in password):
+            errors.append(_('Debe incluir al menos una letra minúscula.'))
+        if not any(c.isdigit() for c in password):
+            errors.append(_('Debe incluir al menos un número.'))
+        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?/~`' for c in password):
+            errors.append(_('Debe incluir al menos un símbolo especial.'))
+        if errors:
+            raise forms.ValidationError(errors)
+        return password
 
     def clean_password_confirm(self):
         password = self.cleaned_data.get('password')

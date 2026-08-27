@@ -46,7 +46,7 @@ class SSOConfiguration(models.Model):
             SSOConfiguration.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)
 
-    def get_authorization_url(self):
+    def get_authorization_url(self, prompt=None):
         from urllib.parse import urlencode
         base = f'https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize'
         params = {
@@ -57,6 +57,8 @@ class SSOConfiguration(models.Model):
             'scope': self.scopes,
             'state': str(uuid.uuid4()),
         }
+        if prompt:
+            params['prompt'] = prompt
         return f'{base}?{urlencode(params)}'
 
     def get_logout_url(self):

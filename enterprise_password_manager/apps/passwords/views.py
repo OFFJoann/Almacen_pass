@@ -303,7 +303,7 @@ def entry_detail(request, pk):
             ip_address=request.META.get('REMOTE_ADDR', ''),
         )
 
-    all_shares = Share.objects.filter(entry=entry).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    all_shares = Share.objects.filter(entry=entry, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()
     shares = []
     for s in all_shares:
@@ -623,7 +623,7 @@ def entry_share(request, pk):
     else:
         form = ShareForm(user=request.user)
 
-    all_existing = Share.objects.filter(entry=entry).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    all_existing = Share.objects.filter(entry=entry, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()
     existing_shares = []
     for s in all_existing:
@@ -662,6 +662,41 @@ def revoke_share(request, share_id):
 
     messages.success(request, _('Acceso revocado'))
     return redirect('passwords:detail', pk=share.entry.pk)
+
+
+@login_required
+@require_POST
+def revoke_share_received(request, share_id):
+    """El destinatario revoca su propio acceso a una contraseña que le compartieron.
+
+    Al revocar (is_revoked=True) el registro deja de verse tanto para él como
+    para el dueño, cumpliendo la solicitud de descompartir desde ambos lados.
+    """
+    share = get_object_or_404(
+        Share.objects.filter(
+            Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user)
+        ),
+        pk=share_id, is_revoked=False,
+    )
+    share.revoke()
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='SHARE_REVOKED',
+        details=f'El destinatario revocó su acceso: {share.entry.name}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+
+    notify_event('share_revoked', {
+        'usuario': request.user.email,
+        'compartido_con': request.user.email,
+        'nombre_servicio': share.entry.name,
+    })
+
+    messages.success(request, _('Has revocado tu acceso a este registro compartido.'))
+    return redirect(request.META.get('HTTP_REFERER', 'passwords:vault'))
 
 
 @login_required
@@ -935,18 +970,15 @@ def import_passwords(request):
 
 @login_required
 def export_passwords(request):
-    # Los usuarios que iniciaron sesión por SSO deben reconfirmar su identidad
-    # (step-up) antes de exportar datos sensibles, para asegurar que son ellos.
-    if request.session.get('auth_method') == 'sso':
-        reauth_at = request.session.get('export_reauthed_at')
-        recent = False
-        if reauth_at:
-            try:
-                dt = timezone.datetime.fromisoformat(reauth_at)
-                recent = (timezone.now() - dt).total_seconds() < 600
-            except Exception:
-                recent = False
-        if not recent:
+    # Step-up: si el SSO está activo, SIEMPRE se exige re-autenticación SSO
+    # antes de exportar datos sensibles, sin importar cómo inició sesión el
+    # usuario. Así al pulsar "Exportar mis datos" se le lleva a revalidar SSO.
+    from apps.sso.models import SSOConfiguration
+    sso_active = SSOConfiguration.objects.filter(is_active=True).exists()
+    if sso_active:
+        # Solo se permite continuar si venimos de un re-login SSO inmediato
+        # (bandera de un solo uso fijada por sso:login al completar el step-up).
+        if not request.session.pop('_export_stepup_done', False):
             request.session['pending_export_reauth'] = True
             return redirect('sso:login')
 
