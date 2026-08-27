@@ -47,7 +47,7 @@
     </div>
 
     <div class="card shadow-sm">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Respondidas</h6></div>
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Respondidas ({{ responded_requests|length }})</h6></div>
         <div class="card-body p-0">
             {% if responded_requests %}
             <div class="table-responsive">
@@ -78,7 +78,7 @@
     </div>
 
     <div class="card shadow-sm mt-4">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-send"></i> Mis solicitudes enviadas</h6></div>
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-send"></i> Mis solicitudes enviadas ({{ my_requests|length }})</h6></div>
         <div class="card-body p-0">
             {% if my_requests %}
             <div class="table-responsive">

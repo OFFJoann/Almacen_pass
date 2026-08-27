@@ -87,6 +87,7 @@ MIDDLEWARE = [
     'apps.authentication.middleware.SessionSecurityMiddleware',
     'apps.audit.middleware.AuditMiddleware',
     'apps.authentication.middleware.RequireLoginMiddleware',
+    'apps.authentication.middleware.ForcePasswordChangeMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -308,6 +309,13 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+CELERY_BEAT_SCHEDULE = {
+    'sync-license-hourly': {
+        'task': 'apps.licensing.tasks.sync_license_task',
+        'schedule': 3600.0,  # cada 1 hora
+    },
+}
 
 CONTENT_SECURITY_POLICY = {
     'DIRECTIVES': {

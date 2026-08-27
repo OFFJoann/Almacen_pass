@@ -209,7 +209,7 @@ def secret_detail(request, pk):
             raise Http404
     fields = secret.get_fields_display()
     notes = secret.get_notes()
-    all_shares = SecretShare.objects.filter(secret=secret).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    all_shares = SecretShare.objects.filter(secret=secret, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()
     shares = []
     for s in all_shares:
@@ -274,7 +274,7 @@ def secret_share(request, pk):
     else:
         form = SecretShareForm(user=request.user)
 
-    all_existing = SecretShare.objects.filter(secret=secret).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+    all_existing = SecretShare.objects.filter(secret=secret, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()
     existing_shares = []
     for s in all_existing:
@@ -302,6 +302,30 @@ def secret_revoke_share(request, share_id):
     })
     messages.success(request, _('Compartición revocada.'))
     return redirect('secrets:detail', pk=share.secret.pk)
+
+
+@login_required
+@require_POST
+def secret_revoke_share_received(request, share_id):
+    """El destinatario revoca su propio acceso a un secreto que le compartieron.
+
+    Al revocar (is_revoked=True) el registro desaparece tanto para él como para
+    el dueño, descompartiendo desde ambos lados.
+    """
+    share = get_object_or_404(
+        SecretShare.objects.filter(
+            Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user)
+        ),
+        pk=share_id, is_revoked=False,
+    )
+    share.revoke()
+    notify_event('share_revoked', {
+        'usuario': request.user.email,
+        'compartido_con': request.user.email,
+        'nombre_servicio': share.secret.name,
+    })
+    messages.success(request, _('Has revocado tu acceso a este secreto compartido.'))
+    return redirect(request.META.get('HTTP_REFERER', 'secrets:list'))
 
 
 @login_required

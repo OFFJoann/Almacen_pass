@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from .models import License
+from .models import License, _parse_dt
 from .utils import get_installation_id
 
 
@@ -22,11 +22,11 @@ def license_view(request):
         key = request.POST.get('license_key', '').strip()
         api_url = request.POST.get('api_url', '').strip()
 
-        if action == 'revalidate':
+        if action == 'sync':
             if not lic.license_key or not lic.company:
-                messages.error(request, _('No hay licencia activada para revalidar.'))
+                messages.error(request, _('No hay licencia activada para sincronizar.'))
                 return redirect('licensing:license')
-        else:
+        else:  # activate
             if not company or not key:
                 messages.error(request, _('Ingresa la empresa y la clave de licencia.'))
                 return redirect('licensing:license')
@@ -34,43 +34,31 @@ def license_view(request):
             lic.license_key = key
             lic.api_url = api_url
 
-        old_max = lic.max_users
-        old_exp = lic.expires_at
-        old_valid = lic.is_valid
-        valid, payload, error = lic.verify()
+        was_valid = lic.is_valid
+        valid, error = lic.sync()
+        if valid and action == 'activate' and not was_valid:
+            lic.activated_at = timezone.now()
+            lic.save(update_fields=['activated_at'])
         if valid:
-            lic.max_users = payload.get('max_users')
-            lic.expires_at = _parse_dt(payload.get('expires_at'))
-            lic.installation_id = payload.get('installation_id', '') or ''
-            lic.is_valid = True
-            lic.error = ''
-            lic.last_checked_at = timezone.now()
-            if action != 'revalidate':
-                lic.activated_at = timezone.now()
-            changed = (old_max != lic.max_users) or (old_exp != lic.expires_at) or (not old_valid)
-            from .notifications import evaluate_license_notifications
-            evaluate_license_notifications(lic, updated=changed)
-            lic.save()
-            messages.success(request, _('Licencia validada correctamente.'))
+            if action == 'activate':
+                messages.success(request, _('Licencia validada correctamente.'))
+            else:
+                messages.success(request, _('Licencia sincronizada correctamente.'))
         else:
-            lic.is_valid = False
-            lic.error = error
-            lic.last_checked_at = timezone.now()
-            lic.expiry_alert_sent = False
-            lic.save(update_fields=['is_valid', 'error', 'last_checked_at', 'expiry_alert_sent'])
             messages.error(request, _('La licencia no es válida: %s') % error)
         return redirect('licensing:license')
+
+    next_sync = None
+    if lic.last_checked_at:
+        next_sync = lic.last_checked_at + timezone.timedelta(seconds=lic.sync_interval)
+    next_sync_ts = int(next_sync.timestamp()) if next_sync else 0
 
     return render(request, 'licensing/license.html', {
         'status': lic.status(),
         'company': lic.company,
         'api_url': lic.api_url,
         'installation_id': get_installation_id(),
+        'last_checked_at': lic.last_checked_at,
+        'sync_interval': lic.sync_interval,
+        'next_sync_ts': next_sync_ts,
     })
-
-
-def _parse_dt(value):
-    from django.utils.dateparse import parse_datetime
-    if not value:
-        return None
-    return parse_datetime(value)

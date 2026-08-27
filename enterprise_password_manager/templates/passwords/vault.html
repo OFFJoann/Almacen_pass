@@ -249,6 +249,8 @@
                                                     <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Re-compartir"><i class="bi bi-share"></i></a>
                                                 {% endif %}
                                             </div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" title="Revocar mi acceso" onclick="ticoConfirm('¿Revocar tu acceso a este registro compartido?', 'revoke-pw-received-{{ share.pk }}')"><i class="bi bi-x-lg"></i></button>
+                                            <form method="post" id="revoke-pw-received-{{ share.pk }}" action="{% url 'passwords:revoke_share_received' share.pk %}" class="d-none">{% csrf_token %}</form>
                                         </td>
                                     </tr>
                                 {% endfor %}

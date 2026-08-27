@@ -15,5 +15,6 @@ urlpatterns = [
     path('<uuid:pk>/permanent-delete/', views.secret_permanent_delete, name='permanent_delete'),
     path('<uuid:pk>/share/', views.secret_share, name='share'),
     path('share/<uuid:share_id>/revoke/', views.secret_revoke_share, name='revoke_share'),
+    path('share/<uuid:share_id>/revoke-received/', views.secret_revoke_share_received, name='revoke_share_received'),
     path('share/<uuid:share_id>/update-permission/', views.secret_update_share_permission, name='update_share_permission'),
 ]

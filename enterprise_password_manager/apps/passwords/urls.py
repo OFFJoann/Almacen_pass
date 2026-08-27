@@ -16,6 +16,7 @@ urlpatterns = [
     path('entry/<uuid:pk>/share/', views.entry_share, name='entry_share'),
     path('entry/<uuid:pk>/move-folder/', views.entry_move_folder, name='entry_move_folder'),
     path('share/<uuid:share_id>/revoke/', views.revoke_share, name='revoke_share'),
+    path('share/<uuid:share_id>/revoke-received/', views.revoke_share_received, name='revoke_share_received'),
     path('share/<uuid:share_id>/update-permission/', views.update_share_permission, name='update_share_permission'),
     path('share/requests/', views.share_requests_list, name='share_requests'),
     path('share/requests/<uuid:request_id>/approve/', views.share_request_approve, name='share_request_approve'),

@@ -49,11 +49,6 @@
                         <div class="form-text">Se valida contra el servicio externo de licencias (empresa + clave).</div>
                     </div>
                     <button type="submit" class="btn btn-primary"><i class="bi bi-patch-check"></i> Activar licencia</button>
-                    {% if status.configured %}
-                    <button type="submit" name="action" value="revalidate" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-repeat"></i> Revalidar
-                    </button>
-                    {% endif %}
                 </form>
             </div>
         </div>
@@ -67,6 +62,52 @@
                 <code class="d-block bg-body-tertiary p-2 rounded small">{{ installation_id }}</code>
             </div>
         </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-arrow-repeat"></i> Sincronización con el proveedor</h6></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Sincronización automática con la API del proveedor cada 1 hora (configuración fija, no modificable).</p>
+                <div class="mb-2">
+                    <small class="text-muted">Última sincronización:</small><br>
+                    <span id="last-sync">{{ last_checked_at|date:'Y-m-d H:i'|default:'Nunca' }}</span>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">Próxima sincronización automática en:</small><br>
+                    <span id="sync-countdown" class="fw-bold">—</span>
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <button type="submit" name="action" value="sync" class="btn btn-primary btn-sm w-100" {% if not status.configured %}disabled{% endif %}>
+                        <i class="bi bi-arrow-repeat"></i> Sincronizar ahora
+                    </button>
+                </form>
+                {% if not status.configured %}
+                <div class="form-text text-danger mt-2">Activa una licencia para poder sincronizar.</div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
+
 {% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var nextTs = {{ next_sync_ts|default:0 }};
+    var el = document.getElementById('sync-countdown');
+    if (!nextTs || !el) return;
+    function tick() {
+        var diff = nextTs * 1000 - Date.now();
+        if (diff <= 0) { el.textContent = 'Pendiente / ahora'; return; }
+        var h = Math.floor(diff / 3600000);
+        var m = Math.floor((diff % 3600000) / 60000);
+        var s = Math.floor((diff % 60000) / 1000);
+        el.textContent = (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
+    }
+    tick();
+    setInterval(tick, 1000);
+})();
+</script>
+{% endblock %}
+
