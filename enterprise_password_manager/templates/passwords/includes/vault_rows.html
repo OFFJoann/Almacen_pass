@@ -1,0 +1,70 @@
+{% for entry in entries %}
+<tr>
+    <td>
+        <a href="{% url 'passwords:detail' entry.pk %}" class="text-decoration-none fw-medium">
+            {% if entry.is_favorite %}<i class="bi bi-star-fill text-warning"></i>{% endif %}
+            <i class="bi bi-key"></i> {{ entry.name }}
+            {% if entry.is_compromised %}<span class="badge bg-danger ms-1" title="Expuesta en filtraciones">DarkWeb</span>{% endif %}
+        </a>
+    </td>
+    <td><small class="text-muted">{{ entry.get_username|truncatechars:30 }}</small></td>
+    <td><small class="text-muted">{{ entry.folder.name|default:'-' }}</small></td>
+    <td>
+        {% if entry.strength_info %}
+            <span class="badge bg-{{ entry.strength_info.color }}" title="{{ entry.strength_info.entropy }} bits de entropía">
+                {{ entry.strength_info.label }}
+            </span>
+        {% else %}
+            <span class="badge bg-secondary">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if entry.sensitivity == 'low' %}<span class="badge bg-success">Baja</span>
+        {% elif entry.sensitivity == 'medium' %}<span class="badge bg-warning text-dark">Media</span>
+        {% elif entry.sensitivity == 'high' %}<span class="badge bg-danger">Alta</span>
+        {% elif entry.sensitivity == 'critical' %}<span class="badge bg-dark">Crítica</span>
+        {% endif %}
+    </td>
+    <td><small class="text-muted">{{ entry.last_accessed|timesince|default:'Nunca' }}</small></td>
+    <td>
+        <div class="d-inline-flex align-items-center gap-1">
+            <div class="btn-group btn-group-sm">
+                <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+                <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
+                 <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}', '{{ entry.folder.id|default:'' }}')"><i class="bi bi-folder-symlink"></i></button>
+                <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
+            </div>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'username')">
+                            <i class="bi bi-person"></i> Copiar usuario
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'password')">
+                            <i class="bi bi-key"></i> Copiar contraseña
+                        </a>
+                    </li>
+                    {% if entry.url %}
+                        <li>
+                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'url')">
+                                <i class="bi bi-link-45deg"></i> Copiar URL
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if entry.has_totp %}
+                        <li>
+                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'totp')">
+                                <i class="bi bi-shield-lock"></i> Copiar MFA
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </td>
+</tr>
+{% endfor %}

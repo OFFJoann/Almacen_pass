@@ -15,7 +15,10 @@ from django.views.decorators.http import require_POST
 from django.db.models import Q, Count
 from apps.secrets.models import Secret
 from apps.notifications.models import Notification
-from .models import PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory
+from .models import (
+    PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory,
+    folder_tree_for_user, flatten_folder_tree,
+)
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
                      ShareForm, ShareRequestForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage, check_hibp
@@ -35,13 +38,27 @@ def _strength_color(label):
     return _STRENGTH_COLORS.get(label, 'secondary')
 
 
-@login_required
-def vault_view(request):
-    vault, created = Vault.objects.get_or_create(user=request.user)
-    folders = Folder.objects.filter(user=request.user)
-    categories = Category.objects.filter(user=request.user)
-    tags = Tag.objects.filter(user=request.user)
+def _find_folder_node(nodes, folder_id):
+    fid = str(folder_id)
+    for node in nodes:
+        if str(node['folder'].id) == fid:
+            return node
+        found = _find_folder_node(node['children'], fid)
+        if found:
+            return found
+    return None
 
+
+def _collect_folder_ids(node, acc):
+    for child in node['children']:
+        acc.append(str(child['folder'].id))
+        _collect_folder_ids(child, acc)
+
+
+def _base_vault_entries(request, vault):
+    """Queryset de registros propios (no eliminados/obsoletos) aplicando los
+    filtros de la bóveda (carpeta + subcarpetas, categoría, etiqueta, búsqueda,
+    sensibilidad y favoritos)."""
     entries = PasswordEntry.objects.filter(
         vault=vault, is_deleted=False, is_obsolete=False
     ).select_related('folder', 'category').prefetch_related('tags')
@@ -54,7 +71,12 @@ def vault_view(request):
     favorite = request.GET.get('favorite')
 
     if folder_id:
-        entries = entries.filter(folder_id=folder_id)
+        tree = folder_tree_for_user(request.user)
+        node = _find_folder_node(tree, folder_id)
+        ids = [folder_id]
+        if node:
+            _collect_folder_ids(node, ids)
+        entries = entries.filter(folder_id__in=ids)
     if category_id:
         entries = entries.filter(category_id=category_id)
     if tag_id:
@@ -65,7 +87,10 @@ def vault_view(request):
         entries = entries.filter(sensitivity=sensitivity)
     if favorite:
         entries = entries.filter(is_favorite=True)
+    return entries
 
+
+def _annotate_strength(entries):
     for entry in entries:
         if entry.password_strength:
             entry.strength_info = {
@@ -76,6 +101,34 @@ def vault_view(request):
         else:
             entry.strength_info = None
 
+
+@login_required
+def vault_view(request):
+    vault, created = Vault.objects.get_or_create(user=request.user)
+    categories = Category.objects.filter(user=request.user)
+    tags = Tag.objects.filter(user=request.user)
+
+    all_entries = PasswordEntry.objects.filter(
+        vault=vault, is_deleted=False, is_obsolete=False
+    )
+
+    folder_tree = folder_tree_for_user(request.user)
+    folder_flat = flatten_folder_tree(folder_tree)
+    all_count = all_entries.count()
+
+    filtered = _base_vault_entries(request, vault)
+    total_entries = filtered.count()
+    initial_count = 20
+    entries = list(filtered[:initial_count])
+    _annotate_strength(entries)
+
+    folder_id = request.GET.get('folder')
+    category_id = request.GET.get('category')
+    tag_id = request.GET.get('tag')
+    search = request.GET.get('search', '')
+    sensitivity = request.GET.get('sensitivity')
+    favorite = request.GET.get('favorite')
+
     shared_with_me = Share.objects.filter(
         Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user),
         is_revoked=False,
@@ -85,12 +138,21 @@ def vault_view(request):
         Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
     ).select_related('entry', 'shared_by')
 
+    # Tras un step-up SSO de exportación, la bóveda dispara la descarga del
+    # archivo automáticamente para no dejar la pestaña colgada en el IdP.
+    auto_export = request.session.pop('auto_export_after_stepup', False)
+    export_stepup_query = request.session.pop('export_stepup_query', '') if auto_export else ''
+
     return render(request, 'passwords/vault.html', {
         'vault': vault,
-        'folders': folders,
+        'folder_tree': folder_tree,
+        'folder_flat': folder_flat,
+        'all_count': all_count,
         'categories': categories,
         'tags': tags,
         'entries': entries,
+        'total_entries': total_entries,
+        'initial_count': initial_count,
         'shared_entries': shared_with_me,
         'active_folder': folder_id,
         'active_category': category_id,
@@ -99,7 +161,30 @@ def vault_view(request):
         'active_sensitivity': sensitivity,
         'favorite_filter': favorite,
         'show_onboarding': (not request.user.onboarding_completed) or request.GET.get('tour') == '1',
+        'auto_export_after_stepup': auto_export,
+        'export_stepup_query': export_stepup_query,
     })
+
+
+@login_required
+def vault_entries_partial(request):
+    """Devuelve un lote de filas de registros (HTML) para carga progresiva
+    en la bóveda. Parámetros: offset, limit y los filtros habituales."""
+    vault, _ = Vault.objects.get_or_create(user=request.user)
+    filtered = _base_vault_entries(request, vault)
+    total = filtered.count()
+    try:
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 20))
+    except (TypeError, ValueError):
+        offset, limit = 0, 20
+    if offset < 0:
+        offset = 0
+    if limit <= 0 or limit > 100:
+        limit = 20
+    batch = filtered[offset:offset + limit]
+    _annotate_strength(batch)
+    return render(request, 'passwords/includes/vault_rows.html', {'entries': batch})
 
 
 @login_required
@@ -980,6 +1065,7 @@ def export_passwords(request):
         # (bandera de un solo uso fijada por sso:login al completar el step-up).
         if not request.session.pop('_export_stepup_done', False):
             request.session['pending_export_reauth'] = True
+            request.session['export_stepup_query'] = request.META.get('QUERY_STRING', '')
             return redirect('sso:login')
 
     from apps.users.models import get_user_effective_policy
@@ -1103,6 +1189,13 @@ def entry_move_folder(request, pk):
 
 
 def folder_create(request):
+    parent_id = request.GET.get('parent') or request.POST.get('parent')
+    parent = None
+    initial = {}
+    if parent_id:
+        parent = get_object_or_404(Folder, pk=parent_id, user=request.user)
+        initial['parent'] = parent
+
     if request.method == 'POST':
         form = FolderForm(request.POST, user=request.user)
         if form.is_valid():
@@ -1110,10 +1203,13 @@ def folder_create(request):
             folder.user = request.user
             folder.save()
             messages.success(request, _('Carpeta creada'))
-            return redirect('passwords:vault')
+            redirect_to = reverse('passwords:vault')
+            if parent:
+                redirect_to += '?folder=' + str(parent.id)
+            return redirect(redirect_to)
     else:
-        form = FolderForm(user=request.user)
-    return render(request, 'passwords/folder_form.html', {'form': form})
+        form = FolderForm(user=request.user, initial=initial)
+    return render(request, 'passwords/folder_form.html', {'form': form, 'parent': parent})
 
 
 @login_required
@@ -1134,8 +1230,18 @@ def category_create(request):
 @login_required
 def folder_delete(request, pk):
     folder = get_object_or_404(Folder, pk=pk, user=request.user)
-    children = folder.children.all()
-    entry_count = folder.entries.count()
+
+    def collect_subfolders(node, acc):
+        for child in node.children.all():
+            acc.append(child)
+            collect_subfolders(child, acc)
+
+    children = []
+    collect_subfolders(folder, children)
+    all_folder_ids = [folder.id] + [f.id for f in children]
+    entry_count = PasswordEntry.objects.filter(
+        folder_id__in=all_folder_ids, is_deleted=False, is_obsolete=False
+    ).count()
     if request.method == 'POST':
         name = folder.name
         folder.delete()

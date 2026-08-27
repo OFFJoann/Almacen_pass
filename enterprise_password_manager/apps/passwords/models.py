@@ -470,3 +470,44 @@ class Attachment(models.Model):
 
     def __str__(self):
         return self.filename
+
+
+def folder_tree_for_user(user):
+    """Devuelve el árbol de carpetas del usuario con el conteo de registros
+    de cada nodo, incluyendo las subcarpetas."""
+    folders = list(Folder.objects.filter(user=user).select_related('parent'))
+    counts = {
+        f.id: f.entries.filter(is_deleted=False, is_obsolete=False).count()
+        for f in folders
+    }
+    children_map = {}
+    for f in folders:
+        children_map.setdefault(f.parent_id, []).append(f)
+    for lst in children_map.values():
+        lst.sort(key=lambda x: x.name.lower())
+
+    def build(parent_id):
+        nodes = []
+        for f in children_map.get(parent_id, []):
+            kids = build(f.id)
+            cnt = counts.get(f.id, 0) + sum(k['count'] for k in kids)
+            nodes.append({'folder': f, 'children': kids, 'count': cnt})
+        return nodes
+
+    return build(None)
+
+
+def flatten_folder_tree(tree, depth=0, acc=None):
+    """Aplana el árbol en una lista con profundidad e indentación para
+    renderizar en elementos <select>."""
+    if acc is None:
+        acc = []
+    for node in tree:
+        acc.append({
+            'folder': node['folder'],
+            'depth': depth,
+            'prefix': '\u00a0' * (depth * 4),
+            'count': node['count'],
+        })
+        flatten_folder_tree(node['children'], depth + 1, acc)
+    return acc

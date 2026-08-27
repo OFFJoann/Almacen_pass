@@ -11,7 +11,7 @@
   {
     "empresa": "Autoamerica",
     "licencia": "LIC-GLOBEX-22B1D4",
-    "max_users": 2,
+    "max_users": 100,
     "expires_at": "2027-06-30T23:59:59",
     "installation_id": "",
     "active": true,

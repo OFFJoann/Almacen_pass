@@ -16,6 +16,17 @@
         z-index: 2;
         box-shadow: inset 0 -1px 0 var(--bs-border-color);
     }
+    .folder-children {
+        margin-left: 1.05rem;
+        border-left: 2px solid var(--bs-border-color);
+        padding-left: .15rem;
+    }
+    .folder-children .list-group-item { border: none; border-radius: 0; }
+    .folder-children.collapsed { display: none; }
+    .folder-toggle { cursor: pointer; font-size: .8rem; width: 1rem; text-align: center; }
+    .folder-toggle-placeholder { display: inline-block; width: 1rem; }
+    .spin { display: inline-block; animation: tico-spin 1s linear infinite; }
+    @keyframes tico-spin { to { transform: rotate(360deg); } }
 </style>
 {% endblock %}
 
@@ -28,9 +39,6 @@
         </button>
         <button class="btn btn-sm btn-outline-primary" data-tour="category" onclick="location.href='{% url 'passwords:category_create' %}'">
             <i class="bi bi-tag"></i> Categoría
-        </button>
-        <button class="btn btn-sm btn-outline-primary" data-tour="tag" onclick="location.href='{% url 'passwords:tag_create' %}'">
-            <i class="bi bi-bookmark-plus"></i> Etiqueta
         </button>
         <a href="{% url 'passwords:entry_create' %}" class="btn btn-sm btn-primary" data-tour="new-entry">
             <i class="bi bi-plus-lg"></i> Nueva Contraseña
@@ -46,19 +54,9 @@
                 <div class="list-group list-group-flush">
                     <a href="{% url 'passwords:vault' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if not active_folder %}active{% endif %}">
                         Todos los Elementos
-                        <span class="badge bg-primary rounded-pill">{{ entries.count }}</span>
+                        <span class="badge bg-primary rounded-pill">{{ all_count }}</span>
                     </a>
-                    {% for folder in folders %}
-                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if active_folder == folder.id|stringformat:'s' %}active{% endif %}">
-                            <a href="{% url 'passwords:vault' %}?folder={{ folder.id }}" class="text-decoration-none flex-grow-1 {% if active_folder == folder.id|stringformat:'s' %}text-white{% endif %}">
-                                <i class="bi bi-folder{% if active_folder == folder.id|stringformat:'s' %}-open{% endif %}"></i> {{ folder.name }}
-                            </a>
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="badge bg-primary rounded-pill">{{ folder.entries.count }}</span>
-                                <a href="{% url 'passwords:folder_delete' folder.id %}" class="text-danger ms-1" title="Eliminar carpeta"><i class="bi bi-trash"></i></a>
-                            </div>
-                        </div>
-                    {% endfor %}
+                    {% include 'passwords/includes/folder_node.html' with nodes=folder_tree active_folder=active_folder %}
                 </div>
             </div>
         </div>
@@ -121,77 +119,8 @@
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for entry in entries %}
-                                    <tr>
-                                        <td>
-                                            <a href="{% url 'passwords:detail' entry.pk %}" class="text-decoration-none fw-medium">
-                                                {% if entry.is_favorite %}<i class="bi bi-star-fill text-warning"></i>{% endif %}
-                                                <i class="bi bi-key"></i> {{ entry.name }}
-                                                {% if entry.is_compromised %}<span class="badge bg-danger ms-1" title="Expuesta en filtraciones">DarkWeb</span>{% endif %}
-                                            </a>
-                                        </td>
-                                        <td><small class="text-muted">{{ entry.get_username|truncatechars:30 }}</small></td>
-                                        <td><small class="text-muted">{{ entry.folder.name|default:'-' }}</small></td>
-                                        <td>
-                                            {% if entry.strength_info %}
-                                                <span class="badge bg-{{ entry.strength_info.color }}" title="{{ entry.strength_info.entropy }} bits de entropía">
-                                                    {{ entry.strength_info.label }}
-                                                </span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if entry.sensitivity == 'low' %}<span class="badge bg-success">Baja</span>
-                                            {% elif entry.sensitivity == 'medium' %}<span class="badge bg-warning text-dark">Media</span>
-                                            {% elif entry.sensitivity == 'high' %}<span class="badge bg-danger">Alta</span>
-                                            {% elif entry.sensitivity == 'critical' %}<span class="badge bg-dark">Crítica</span>
-                                            {% endif %}
-                                        </td>
-                                        <td><small class="text-muted">{{ entry.last_accessed|timesince|default:'Nunca' }}</small></td>
-                                        <td>
-                                            <div class="d-inline-flex align-items-center gap-1">
-                                                <div class="btn-group btn-group-sm">
-                                                    <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
-                                                    <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
-                                                    <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
-                                                    <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}')"><i class="bi bi-folder-symlink"></i></button>
-                                                    <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
-                                                </div>
-                                                <div class="btn-group btn-group-sm" role="group">
-                                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Copiar"><i class="bi bi-clipboard"></i></button>
-                                                    <ul class="dropdown-menu dropdown-menu-end">
-                                                        <li>
-                                                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'username')">
-                                                                <i class="bi bi-person"></i> Copiar usuario
-                                                            </a>
-                                                        </li>
-                                                        <li>
-                                                            <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'password')">
-                                                                <i class="bi bi-key"></i> Copiar contraseña
-                                                            </a>
-                                                        </li>
-                                                        {% if entry.url %}
-                                                            <li>
-                                                                <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'url')">
-                                                                    <i class="bi bi-link-45deg"></i> Copiar URL
-                                                                </a>
-                                                            </li>
-                                                        {% endif %}
-                                                        {% if entry.has_totp %}
-                                                            <li>
-                                                                <a class="dropdown-item" href="#" onclick="copyEntryData('{{ entry.pk }}', 'totp')">
-                                                                    <i class="bi bi-shield-lock"></i> Copiar MFA
-                                                                </a>
-                                                            </li>
-                                                        {% endif %}
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
+                            <tbody id="entriesBody">
+                                {% include 'passwords/includes/vault_rows.html' with entries=entries %}
                             </tbody>
                         </table>
                     </div>
@@ -274,8 +203,8 @@
                 <label class="form-label">Selecciona la carpeta destino</label>
                 <select class="form-select" id="moveFolderSelect">
                     <option value="">Sin carpeta</option>
-                    {% for f in folders %}
-                        <option value="{{ f.id }}">{{ f.name }}</option>
+                    {% for item in folder_flat %}
+                        <option value="{{ item.folder.id }}">{{ item.prefix }}{{ item.folder.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -290,6 +219,56 @@
 
 {% block extra_js %}
 <script>
+    // ---------- Carga progresiva de registros (Mi Bóveda) ----------
+    (function () {
+        const tbody = document.getElementById('entriesBody');
+        if (!tbody) return;
+        const total = {{ total_entries|default:0 }};
+        let offset = {{ initial_count|default:20 }};
+        const limit = 20;
+        if (offset >= total) return;
+
+        const table = tbody.closest('table');
+        const card = table ? table.closest('.card') : null;
+        const indicator = document.createElement('div');
+        indicator.id = 'entriesLoading';
+        indicator.className = 'text-center text-muted py-2 small';
+        indicator.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Cargando más registros…';
+        if (card) card.appendChild(indicator);
+
+        function loadMore() {
+            if (offset >= total) { if (indicator) indicator.remove(); return; }
+            const params = new URLSearchParams(window.location.search);
+            params.set('partial', '1');
+            params.set('offset', offset);
+            params.set('limit', limit);
+            fetch("{% url 'passwords:vault_entries_partial' %}?" + params.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    tbody.insertAdjacentHTML('beforeend', html);
+                    offset += limit;
+                    if (offset < total) {
+                        setTimeout(loadMore, 60);
+                    } else if (indicator) {
+                        indicator.remove();
+                    }
+                })
+                .catch(function () { if (indicator) indicator.remove(); });
+        }
+        setTimeout(loadMore, 200);
+    })();
+
+    function toggleFolder(icon) {
+        const node = icon.closest('.folder-node');
+        const children = node ? node.querySelector(':scope > .folder-children') : null;
+        if (!children) return;
+        children.classList.toggle('collapsed');
+        icon.classList.toggle('bi-chevron-down');
+        icon.classList.toggle('bi-chevron-right');
+    }
+
     async function copyEntryData(pk, field) {
         try {
             const res = await fetch('/vault/entry/' + pk + '/copy-data/');
@@ -308,9 +287,9 @@
     }
 
     let moveEntryPk = null;
-    function openMoveModal(pk) {
+    function openMoveModal(pk, currentFolder) {
         moveEntryPk = pk;
-        document.getElementById('moveFolderSelect').value = '';
+        document.getElementById('moveFolderSelect').value = currentFolder || '';
         new bootstrap.Modal(document.getElementById('moveFolderModal')).show();
     }
     document.getElementById('moveFolderConfirm').addEventListener('click', function () {
@@ -394,11 +373,6 @@
                 selector: '[data-tour="category"]',
                 title: 'Categoría',
                 text: 'Clasifica tus contraseñas por tipo (Correo, Bancos, Redes sociales...). Sirve como otra forma de organización.',
-            },
-            {
-                selector: '[data-tour="tag"]',
-                title: 'Etiqueta',
-                text: 'Las etiquetas te permiten marcar accesos con palabras clave y encontrarlos más rápido.',
             },
             {
                 selector: '[data-tour="search"]',
@@ -526,4 +500,18 @@
     })();
     {% endif %}
 </script>
+
+{% if auto_export_after_stepup %}
+<script>
+    // Tras un re-login SSO (step-up) para exportar, descargamos el archivo
+    // automáticamente. Como la respuesta es un attachment, la pestaña se
+    // queda en la bóveda en lugar de quedar colgada en el IdP.
+    (function () {
+        var q = "{{ export_stepup_query|escapejs }}";
+        var url = "{% url 'passwords:export' %}";
+        if (q) { url += '?' + q; }
+        window.location.href = url;
+    })();
+</script>
+{% endif %}
 {% endblock %}

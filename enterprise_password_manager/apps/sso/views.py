@@ -282,10 +282,13 @@ def sso_callback(request):
 
         # Re-autenticación paso-a-paso (step-up) para exportar datos: si venimos
         # de una solicitud de exportación de un usuario SSO, fijamos la bandera de
-        # un solo uso y volvemos para que la exportación se autorice una sola vez.
+        # un solo uso y volvemos a la bóveda. La descarga del archivo se dispara
+        # desde la bóveda (con un solo uso) para no dejar la pestaña colgada en
+        # el IdP sirviendo un archivo adjunto en lugar de una página HTML.
         if request.session.pop('pending_export_reauth', False):
             request.session['_export_stepup_done'] = True
-            return redirect('passwords:export')
+            request.session['auto_export_after_stepup'] = True
+            return redirect('passwords:vault')
 
         return redirect('passwords:vault')
 

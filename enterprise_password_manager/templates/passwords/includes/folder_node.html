@@ -1,0 +1,26 @@
+{% for node in nodes %}
+  <div class="folder-node">
+    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if active_folder == node.folder.id|stringformat:'s' %}active{% endif %}">
+      <span class="d-flex flex-grow-1 align-items-center text-decoration-none {% if active_folder == node.folder.id|stringformat:'s' %}text-white{% endif %}">
+        {% if node.children %}
+          <i class="bi bi-chevron-down folder-toggle me-1" role="button" onclick="toggleFolder(this)" title="Desplegar / plegar"></i>
+        {% else %}
+          <span class="folder-toggle-placeholder me-1"></span>
+        {% endif %}
+        <a href="{% url 'passwords:vault' %}?folder={{ node.folder.id }}" class="text-decoration-none flex-grow-1 {% if active_folder == node.folder.id|stringformat:'s' %}text-white{% endif %}">
+          <i class="bi bi-folder{% if active_folder == node.folder.id|stringformat:'s' %}-open{% endif %}"></i> {{ node.folder.name }}
+        </a>
+      </span>
+      <div class="d-flex align-items-center gap-1">
+        <span class="badge bg-primary rounded-pill">{{ node.count }}</span>
+        <a href="{% url 'passwords:folder_create' %}?parent={{ node.folder.id }}" class="text-success ms-1" title="Nueva subcarpeta"><i class="bi bi-folder-plus"></i></a>
+        <a href="{% url 'passwords:folder_delete' node.folder.id %}" class="text-danger ms-1" title="Eliminar carpeta"><i class="bi bi-trash"></i></a>
+      </div>
+    </div>
+    {% if node.children %}
+      <div class="folder-children">
+        {% include 'passwords/includes/folder_node.html' with nodes=node.children active_folder=active_folder %}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}

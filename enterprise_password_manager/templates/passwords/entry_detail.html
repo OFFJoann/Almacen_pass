@@ -93,14 +93,6 @@
                     <p class="mb-0 text-break">{{ notes|linebreaks|default:'-' }}</p>
                 </div>
 
-                {% if entry.tags.all %}
-                    <div class="mb-3">
-                        {% for tag in entry.tags.all %}
-                            <span class="badge" style="background-color: {{ tag.color }}">{{ tag.name }}</span>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-
                 <div class="row text-muted small">
                     <div class="col-md-3">Creado: {{ entry.created_at|date:'Y-m-d H:i' }}</div>
                     <div class="col-md-3">Actualizado: {{ entry.updated_at|date:'Y-m-d H:i' }}</div>
