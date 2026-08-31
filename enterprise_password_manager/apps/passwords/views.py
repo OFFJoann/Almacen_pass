@@ -1474,20 +1474,36 @@ def user_dashboard(request):
     vault, created = Vault.objects.get_or_create(user=request.user)
     now = timezone.now()
 
-    entries = PasswordEntry.objects.filter(vault=vault, is_deleted=False, is_obsolete=False)
-    total_entries = entries.count()
-    expiring_soon = entries.filter(expires_at__lt=now).count()
-    entries_expiring_30d = entries.filter(expires_at__gte=now, expires_at__lte=now + timedelta(days=30)).count()
-    favorites = entries.filter(is_favorite=True).count()
+    base_entries = PasswordEntry.objects.filter(
+        vault=vault, is_deleted=False, is_obsolete=False
+    )
+    entries = list(base_entries.only(
+        'pk', 'name', 'expires_at', 'is_favorite', 'is_compromised',
+        'created_at', 'password_strength', 'password_hmac',
+        'password_entropy', 'totp_secret_encrypted', 'totp_secret_nonce',
+        'totp_secret_salt',
+    ))
+    total_entries = len(entries)
+
+    def _is_expiring(e):
+        return e.expires_at is not None and e.expires_at < now
+
+    expiring_soon = sum(1 for e in entries if _is_expiring(e))
+    entries_expiring_30d = sum(
+        1 for e in entries
+        if e.expires_at is not None and now <= e.expires_at <= now + timedelta(days=30)
+    )
+    favorites = sum(1 for e in entries if e.is_favorite)
+    compromised_count = sum(1 for e in entries if e.is_compromised)
     entries_with_totp = [e for e in entries if e.has_totp]
     totp_count = len(entries_with_totp)
     no_totp_entries = [e for e in entries if not e.has_totp]
     no_totp_count = len(no_totp_entries)
 
-    category_counts = entries.values('category__name').annotate(count=Count('id')).order_by('-count')
-    sensitivity_counts = entries.values('sensitivity').annotate(count=Count('id')).order_by('sensitivity')
+    category_counts = base_entries.values('category__name').annotate(count=Count('id')).order_by('-count')
+    sensitivity_counts = base_entries.values('sensitivity').annotate(count=Count('id')).order_by('sensitivity')
 
-    folders = entries.values('folder__name').annotate(count=Count('id')).order_by('-count')
+    folders = base_entries.values('folder__name').annotate(count=Count('id')).order_by('-count')
 
     shares_given = Share.objects.filter(entry__vault=vault, is_revoked=False).count()
     shares_received = Share.objects.filter(
@@ -1502,19 +1518,15 @@ def user_dashboard(request):
         entry__is_obsolete=False,
     ).distinct().select_related('entry', 'shared_by')[:10]
 
-    weak_passwords_count = 0
-    reused_passwords = []
-    duplicate_groups = []
-
-    for e in entries:
-        if e.password_strength and e.password_strength in ('Débil', 'Muy Débil'):
-            weak_passwords_count += 1
-
-    hmac_counter = Counter(
-        e.password_hmac for e in entries if e.password_hmac
+    weak_passwords_count = sum(
+        1 for e in entries
+        if e.password_strength and e.password_strength in ('Débil', 'Muy Débil')
     )
+
+    hmac_counter = Counter(e.password_hmac for e in entries if e.password_hmac)
     duplicate_hmacs = {h for h, count in hmac_counter.items() if count > 1}
 
+    duplicate_groups = []
     if duplicate_hmacs:
         dup_entries_by_hmac = {}
         for entry in entries:
@@ -1531,13 +1543,11 @@ def user_dashboard(request):
     from apps.users.models import ActiveSession
     active_sessions_count = ActiveSession.objects.filter(user=request.user, expires_at__gt=now).count()
 
-    all_passwords_count = entries.count()
+    all_passwords_count = total_entries
     avg_entropy = 0
     entropy_values = [e.password_entropy for e in entries if e.password_entropy > 0]
     if entropy_values:
         avg_entropy = sum(entropy_values) / len(entropy_values)
-
-    compromised_count = entries.filter(is_compromised=True).count()
 
     score = 100
     score -= min(weak_passwords_count * 20, 50)
@@ -1586,8 +1596,8 @@ def user_dashboard(request):
     emergency_contact_required = request.user.can_manage_users() and not request.user.has_emergency_contact()
     emergency_contact_set = request.user.has_emergency_contact()
 
-    old_entry = entries.filter(is_deleted=False).order_by('created_at').first()
-    new_entry = entries.filter(is_deleted=False).order_by('-created_at').first()
+    old_entry = min(entries, key=lambda e: e.created_at, default=None) if entries else None
+    new_entry = max(entries, key=lambda e: e.created_at, default=None) if entries else None
     oldest_password_date = old_entry.created_at if old_entry else None
     newest_password_date = new_entry.created_at if new_entry else None
 
