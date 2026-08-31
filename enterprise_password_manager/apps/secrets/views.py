@@ -1,6 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
+from django.template.loader import render_to_string
+from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
@@ -73,6 +75,12 @@ def secret_edit(request, pk):
         messages.error(request, _('Tipo de secreto inválido.'))
         return redirect('secrets:list')
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    render_edit_partial = lambda: render_to_string(  # noqa: E731
+        'secrets/includes/secret_form_partial.html',
+        {'form': form, 'is_edit': True}, request=request,
+    )
+
     if request.method == 'POST':
         form = form_class(request.POST, secret_type=secret.type, instance=secret)
         if form.is_valid():
@@ -82,6 +90,8 @@ def secret_edit(request, pk):
                 secret.expiry_notified_at = None
             secret.save()
             messages.success(request, _('Secreto actualizado exitosamente.'))
+            if is_ajax:
+                return JsonResponse({'status': 'ok', 'message': _('Secreto actualizado exitosamente.')})
             return redirect('secrets:list')
     else:
         data = secret.get_data()
@@ -116,6 +126,11 @@ def secret_edit(request, pk):
             initial['custom_fields'] = lines
 
         form = form_class(secret_type=secret.type, instance=secret, initial=initial)
+
+    if is_ajax:
+        if form.errors:
+            return JsonResponse({'status': 'error', 'html': render_edit_partial()})
+        return HttpResponse(render_edit_partial(), content_type='text/html')
 
     return render(request, 'secrets/secret_form.html', {
         'form': form,
@@ -231,6 +246,8 @@ def secret_detail(request, pk):
 def secret_share(request, pk):
     secret = get_object_or_404(Secret, pk=pk, user=request.user, is_deleted=False, is_obsolete=False)
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if request.method == 'POST':
         form = SecretShareForm(request.POST, user=request.user)
         if form.is_valid():
@@ -270,6 +287,8 @@ def secret_share(request, pk):
                     'nombre_servicio': secret.name,
                 }, extra_recipients=extra_recipients)
                 messages.success(request, _('Secreto compartido exitosamente.'))
+            if is_ajax:
+                return JsonResponse({'status': 'ok', 'message': _('Secreto compartido exitosamente.')})
             return redirect('secrets:detail', pk=secret.pk)
     else:
         form = SecretShareForm(user=request.user)
@@ -282,6 +301,13 @@ def secret_share(request, pk):
         if key not in seen:
             seen.add(key)
             existing_shares.append(s)
+    if is_ajax:
+        partial = render_to_string('secrets/includes/share_form_partial.html',
+                                   {'form': form, 'secret': secret, 'existing_shares': existing_shares},
+                                   request=request)
+        if request.method == 'POST':
+            return JsonResponse({'status': 'error', 'html': partial})
+        return HttpResponse(partial, content_type='text/html')
     return render(request, 'secrets/share_form.html', {
         'form': form,
         'secret': secret,

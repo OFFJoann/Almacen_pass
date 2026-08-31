@@ -30,10 +30,10 @@
         <div class="d-inline-flex align-items-center gap-1">
             <div class="btn-group btn-group-sm">
                 <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
-                <a href="{% url 'passwords:entry_edit' entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
-                <a href="{% url 'passwords:entry_share' entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
+                <button type="button" class="btn btn-outline-info" title="Compartir" onclick="openShareModal('{{ entry.pk }}', '{{ entry.name|escapejs }}')"><i class="bi bi-share"></i></button>
                  <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}', '{{ entry.folder.id|default:'' }}')"><i class="bi bi-folder-symlink"></i></button>
-                <a href="{% url 'passwords:entry_delete' entry.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
+                <button type="button" class="btn btn-outline-secondary" title="Editar" onclick="openEditModal('{{ entry.pk }}')"><i class="bi bi-pencil"></i></button>
+                <button type="button" class="btn btn-outline-danger" title="Eliminar" onclick="ticoConfirm('¿Eliminar «{{ entry.name|escapejs }}»? Se moverá a la papelera.', 'entry-delete-{{ entry.pk }}')"><i class="bi bi-trash"></i></button>
             </div>
             <div class="btn-group btn-group-sm" role="group">
                 <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Copiar"><i class="bi bi-clipboard"></i></button>
@@ -66,5 +66,6 @@
             </div>
         </div>
     </td>
+    <form method="post" id="entry-delete-{{ entry.pk }}" action="{% url 'passwords:entry_delete' entry.pk %}" class="d-none">{% csrf_token %}</form>
 </tr>
 {% endfor %}

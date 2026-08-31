@@ -215,6 +215,36 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="editEntryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-pencil"></i> Editar Contraseña</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="editEntryModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="shareEntryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-share"></i> Compartir Contraseña</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="shareEntryModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -314,6 +344,69 @@
         })
         .catch(function () { showToast('No se pudo mover', 'danger'); });
     });
+
+    // ---------- Modales de Editar / Compartir (AJAX) ----------
+    function generatePassword() {
+        fetch("{% url 'passwords:password_generator' %}?length=24&upper=true&lower=true&digits=true&symbols=true")
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var input = document.getElementById('id_password');
+                if (input) input.value = data.password;
+            });
+    }
+    function togglePasswordVisibility() {
+        var input = document.getElementById('id_password');
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function bindActionForm(container, url, modalId) {
+        var form = container.querySelector('form:not([action])');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = form.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            var csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            fetch(url, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
+                body: new FormData(form)
+            })
+            .then(function (r) { return r.json().catch(function () { return { status: 'error', message: 'Respuesta inesperada' }; }); })
+            .then(function (data) {
+                if (data.status === 'ok') {
+                    var m = bootstrap.Modal.getInstance(document.getElementById(modalId));
+                    if (m) m.hide();
+                    showToast(data.message || 'Acción completada', 'success');
+                    location.reload();
+                } else {
+                    if (data.html) { container.innerHTML = data.html; bindActionForm(container, url, modalId); }
+                    if (btn) btn.disabled = false;
+                    showToast(data.message || 'Revisa los campos del formulario', 'danger');
+                }
+            })
+            .catch(function () { if (btn) btn.disabled = false; showToast('Error de red', 'danger'); });
+        });
+    }
+
+    function loadModalForm(modalId, bodyId, url) {
+        var body = document.getElementById(bodyId);
+        body.innerHTML = '<div class="text-center py-4"><i class="bi bi-arrow-repeat spin"></i> Cargando…</div>';
+        var m = new bootstrap.Modal(document.getElementById(modalId));
+        m.show();
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.text(); })
+            .then(function (html) { body.innerHTML = html; bindActionForm(body, url, modalId); })
+            .catch(function () { body.innerHTML = '<div class="alert alert-danger">No se pudo cargar el formulario.</div>'; });
+    }
+
+    function openEditModal(pk) {
+        loadModalForm('editEntryModal', 'editEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/edit/');
+    }
+    function openShareModal(pk, name) {
+        loadModalForm('shareEntryModal', 'shareEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/share/');
+    }
 
     {% if show_onboarding %}
     // ---------- Tour de bienvenida ----------
