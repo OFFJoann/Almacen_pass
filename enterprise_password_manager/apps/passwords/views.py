@@ -1468,11 +1468,20 @@ def password_history_restore(request, pk, hist_pk):
 
 @login_required
 def user_dashboard(request):
+    import logging, time as _time
+    _log = logging.getLogger('apps.passwords')
+    _marks = []
+    def _mark(name):
+        _marks.append((name, _time.time()))
+
+    _mark('start')
     from apps.mailer.tasks import check_expired_passwords
     check_expired_passwords()
+    _mark('check_expired')
 
     vault, created = Vault.objects.get_or_create(user=request.user)
     now = timezone.now()
+    _mark('vault')
 
     base_entries = PasswordEntry.objects.filter(
         vault=vault, is_deleted=False, is_obsolete=False
@@ -1484,6 +1493,7 @@ def user_dashboard(request):
         'totp_secret_salt',
     ))
     total_entries = len(entries)
+    _mark('entries_fetch')
 
     def _is_expiring(e):
         return e.expires_at is not None and e.expires_at < now
@@ -1504,6 +1514,7 @@ def user_dashboard(request):
     sensitivity_counts = base_entries.values('sensitivity').annotate(count=Count('id')).order_by('sensitivity')
 
     folders = base_entries.values('folder__name').annotate(count=Count('id')).order_by('-count')
+    _mark('agregados')
 
     shares_given = Share.objects.filter(entry__vault=vault, is_revoked=False).count()
     shares_received = Share.objects.filter(
@@ -1517,6 +1528,7 @@ def user_dashboard(request):
         entry__is_deleted=False,
         entry__is_obsolete=False,
     ).distinct().select_related('entry', 'shared_by')[:10]
+    _mark('shares')
 
     weak_passwords_count = sum(
         1 for e in entries
@@ -1542,6 +1554,7 @@ def user_dashboard(request):
     last_login = LoginHistory.objects.filter(user=request.user, success=True).order_by('-login_at').first()
     from apps.users.models import ActiveSession
     active_sessions_count = ActiveSession.objects.filter(user=request.user, expires_at__gt=now).count()
+    _mark('audit_login')
 
     all_passwords_count = total_entries
     avg_entropy = 0
@@ -1592,6 +1605,7 @@ def user_dashboard(request):
         robustness_color = 'danger'
 
     secret_count = Secret.objects.filter(user=request.user, is_deleted=False).count()
+    _mark('secret_count')
 
     emergency_contact_required = request.user.can_manage_users() and not request.user.has_emergency_contact()
     emergency_contact_set = request.user.has_emergency_contact()
@@ -1636,6 +1650,13 @@ def user_dashboard(request):
         'emergency_contact_required': emergency_contact_required,
         'emergency_contact_set': emergency_contact_set,
     }
+    _mark('pre_render')
+    if _marks:
+        parts = ' | '.join(
+            '%s=%.3f' % (name, t2 - t1)
+            for (name, t1), (_, t2) in zip(_marks, _marks[1:])
+        )
+        _log.warning('user_dashboard TIMING total=%.3f :: %s', _marks[-1][1] - _marks[0][1], parts)
     return render(request, 'passwords/user_dashboard.html', context)
 
 
