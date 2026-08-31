@@ -14,7 +14,7 @@ from urllib.parse import parse_qs
 from .models import SSOConfiguration, SSOLog
 from .forms import SSOConfigurationForm
 from apps.users.models import User, LoginHistory, ActiveSession
-from apps.authentication.utils import parse_user_agent, get_client_ip
+from apps.authentication.utils import parse_user_agent, get_client_ip, user_has_active_session
 
 
 @login_required
@@ -231,6 +231,24 @@ def sso_callback(request):
 
         if not user.is_active:
             return _sso_error(request, config, 'USER_INACTIVE', 'Tu cuenta ha sido deshabilitada')
+
+        # Regla de límite de sesiones (una sesión activa por usuario), igual que
+        # en el login local. Se omite para el re-login SSO de exportación
+        # (step-up): ahí el usuario ya tiene su sesión de la bóveda activa y
+        # solo se está re-autenticando para autorizar la descarga.
+        if not request.session.get('pending_export_reauth') and user_has_active_session(user):
+            LoginHistory.objects.create(
+                user=user,
+                ip_address=get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                success=False,
+                failure_reason='Ya existe una sesión activa (SSO)',
+            )
+            return _sso_error(
+                request, config, 'SESSION_LIMIT',
+                'Ya tienes una sesión activa en otro dispositivo o navegador. '
+                'Ciérrala antes de volver a entrar.',
+            )
 
         if config.sync_groups:
             group_ids = user_data.get('groupIds', [])

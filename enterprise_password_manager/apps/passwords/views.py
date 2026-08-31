@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect, get_object_or_404
+from django.template.loader import render_to_string
 from django.http import JsonResponse, HttpResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -277,6 +278,12 @@ def entry_edit(request, pk):
         if not can_edit:
             raise PermissionDenied(_('No tienes permiso para editar esta contraseña.'))
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    render_edit_partial = lambda: render_to_string(  # noqa: E731
+        'passwords/includes/entry_form_partial.html',
+        {'form': form, 'title': _('Editar Contraseña'), 'entry': entry}, request=request,
+    )
+
     if request.method == 'POST':
         form = PasswordEntryForm(request.POST, instance=entry, user=request.user)
         if form.is_valid():
@@ -343,6 +350,8 @@ def entry_edit(request, pk):
             })
 
             messages.success(request, _('Contraseña actualizada exitosamente'))
+            if is_ajax:
+                return JsonResponse({'status': 'ok', 'message': _('Contraseña actualizada exitosamente')})
             return redirect('passwords:vault')
     else:
         form = PasswordEntryForm(instance=entry, user=request.user)
@@ -351,6 +360,11 @@ def entry_edit(request, pk):
             'password': entry.get_password(),
             'notes': entry.get_notes(),
         })
+
+    if is_ajax:
+        if form.errors:
+            return JsonResponse({'status': 'error', 'html': render_edit_partial()})
+        return HttpResponse(render_edit_partial(), content_type='text/html')
 
     return render(request, 'passwords/entry_form.html', {
         'form': form,
@@ -608,6 +622,8 @@ def entry_share(request, pk):
         if not can_reshare:
             raise PermissionDenied(_('No tienes permiso para re-compartir esta contraseña.'))
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if not is_owner:
         if request.method == 'POST':
             form = ShareRequestForm(request.POST, user=request.user, entry=entry)
@@ -646,9 +662,17 @@ def entry_share(request, pk):
                     ip_address=request.META.get('REMOTE_ADDR', ''),
                 )
                 messages.success(request, _('Se envió la solicitud de re-compartición al dueño del registro. Espera su aprobación.'))
+                if is_ajax:
+                    return JsonResponse({'status': 'ok', 'message': _('Solicitud enviada al dueño del registro. Espera su aprobación.')})
                 return redirect('passwords:detail', pk=entry.pk)
         else:
             form = ShareRequestForm(user=request.user, entry=entry)
+        if is_ajax:
+            partial = render_to_string('passwords/includes/share_request_form_partial.html',
+                                       {'form': form, 'entry': entry}, request=request)
+            if request.method == 'POST':
+                return JsonResponse({'status': 'error', 'html': partial})
+            return HttpResponse(partial, content_type='text/html')
         return render(request, 'passwords/share_request_form.html', {
             'form': form,
             'entry': entry,
@@ -704,6 +728,8 @@ def entry_share(request, pk):
                 }, recipients=recipients)
                 messages.success(request, _('Contraseña compartida exitosamente'))
 
+            if is_ajax:
+                return JsonResponse({'status': 'ok', 'message': _('Contraseña compartida exitosamente')})
             return redirect('passwords:detail', pk=entry.pk)
     else:
         form = ShareForm(user=request.user)
@@ -716,6 +742,15 @@ def entry_share(request, pk):
         if key not in seen:
             seen.add(key)
             existing_shares.append(s)
+    if is_ajax:
+        partial = render_to_string(
+            'passwords/includes/share_form_partial.html',
+            {'form': form, 'entry': entry, 'existing_shares': existing_shares},
+            request=request,
+        )
+        if request.method == 'POST':
+            return JsonResponse({'status': 'error', 'html': partial})
+        return HttpResponse(partial, content_type='text/html')
     return render(request, 'passwords/share_form.html', {
         'form': form,
         'entry': entry,
