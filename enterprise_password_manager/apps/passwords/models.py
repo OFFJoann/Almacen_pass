@@ -113,7 +113,7 @@ class PasswordEntry(models.Model):
         Vault, on_delete=models.CASCADE, related_name='entries'
     )
     name = models.CharField(_('nombre'), max_length=255)
-    url = models.URLField(_('URL'), max_length=2048, blank=True, default='')
+    url = models.URLField(_('URL'), max_length=10000, blank=True, default='')
     username_encrypted = models.TextField(_('usuario cifrado'), blank=True, default='')
     username_nonce = models.TextField(blank=True, default='')
     username_salt = models.TextField(blank=True, default='')
