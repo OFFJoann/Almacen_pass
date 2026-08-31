@@ -38,7 +38,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: epm_db
       DB_USER: epm_user
@@ -60,7 +60,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: epm_db
       DB_USER: epm_user
@@ -82,7 +82,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: epm_db
       DB_USER: epm_user
