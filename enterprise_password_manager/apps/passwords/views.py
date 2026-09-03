@@ -23,7 +23,7 @@ from .models import (
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
                      ShareForm, ShareRequestForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage
-from apps.mailer.services import notify_event, domain_from_url
+from apps.mailer.services import domain_from_url
 
 
 _STRENGTH_COLORS = {
@@ -216,7 +216,8 @@ def entry_create(request):
                 ip_address=request.META.get('REMOTE_ADDR', ''),
             )
 
-            notify_event('password_created', {
+            from apps.mailer.tasks import notify_event_task
+            notify_event_task.delay('password_created', {
                 'usuario': request.user.email,
                 'nombre_servicio': entry.name,
                 'dominio': domain_from_url(entry.url),
@@ -224,7 +225,7 @@ def entry_create(request):
                 'riesgo_actual': entry.get_sensitivity_display(),
             })
             if entry.is_compromised:
-                notify_event('password_compromised', {
+                notify_event_task.delay('password_compromised', {
                     'usuario': request.user.email,
                     'nombre_servicio': entry.name,
                     'dominio': domain_from_url(entry.url),
@@ -324,7 +325,7 @@ def entry_edit(request, pk):
                 entry.expiry_notified_at = None
             entry.save()
             form.save_m2m()
-            if pwd_to_check:
+            if 'Contraseña' in changes:
                 from apps.passwords.tasks import check_entry_hibp
                 check_entry_hibp.delay(entry.pk)
 
@@ -337,7 +338,8 @@ def entry_edit(request, pk):
                 ip_address=request.META.get('REMOTE_ADDR', ''),
             )
 
-            notify_event('password_modified', {
+            from apps.mailer.tasks import notify_event_task
+            notify_event_task.delay('password_modified', {
                 'usuario': request.user.email,
                 'nombre_servicio': entry.name,
                 'dominio': domain_from_url(entry.url),
@@ -451,7 +453,8 @@ def entry_delete(request, pk):
             ip_address=request.META.get('REMOTE_ADDR', ''),
         )
 
-        notify_event('password_deleted', {
+        from apps.mailer.tasks import notify_event_task
+        notify_event_task.delay('password_deleted', {
             'usuario': request.user.email,
             'nombre_servicio': entry.name,
             'dominio': domain_from_url(entry.url),
@@ -642,7 +645,8 @@ def entry_share(request, pk):
                     notification_type='info',
                     action_url=reverse('passwords:share_requests'),
                 )
-                notify_event('reshare_requested', {
+                from apps.mailer.tasks import notify_event_task
+                notify_event_task.delay('reshare_requested', {
                     'solicitante': request.user.email,
                     'nombre_servicio': entry.name,
                     'compartido_con': share_request.target_user.email,
@@ -715,7 +719,8 @@ def entry_share(request, pk):
                     recipients = [
                         u.email for u in target_group.members.filter(is_active=True) if u.email
                     ]
-                notify_event('password_shared', {
+                from apps.mailer.tasks import notify_event_task
+                notify_event_task.delay('password_shared', {
                     'compartido_por': request.user.email,
                     'compartido_con': target,
                     'nombre_servicio': entry.name,
@@ -769,7 +774,8 @@ def revoke_share(request, share_id):
     )
 
     target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
-    notify_event('share_revoked', {
+    from apps.mailer.tasks import notify_event_task
+    notify_event_task.delay('share_revoked', {
         'usuario': request.user.email,
         'compartido_con': target,
         'nombre_servicio': share.entry.name,
@@ -804,7 +810,8 @@ def revoke_share_received(request, share_id):
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
 
-    notify_event('share_revoked', {
+    from apps.mailer.tasks import notify_event_task
+    notify_event_task.delay('share_revoked', {
         'usuario': request.user.email,
         'compartido_con': request.user.email,
         'nombre_servicio': share.entry.name,
@@ -894,7 +901,8 @@ def share_request_approve(request, request_id):
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
 
-    notify_event('reshare_approved', {
+    from apps.mailer.tasks import notify_event_task
+    notify_event_task.delay('reshare_approved', {
         'nombre_servicio': entry.name,
         'compartido_con': target.email,
     }, recipients=[share_request.requested_by.email])
