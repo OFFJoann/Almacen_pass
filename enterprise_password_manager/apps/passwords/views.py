@@ -22,7 +22,7 @@ from .models import (
 )
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
                      ShareForm, ShareRequestForm, ImportForm, ExportForm)
-from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage, check_hibp
+from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage
 from apps.mailer.services import notify_event, domain_from_url
 
 
@@ -201,13 +201,11 @@ def entry_create(request):
             entry.set_password(form.cleaned_data.get('password', ''))
             entry.set_notes(form.cleaned_data.get('notes', ''))
             pwd = form.cleaned_data.get('password', '')
-            if pwd:
-                count = check_hibp(pwd)
-                entry.is_compromised = count > 0
-                entry.compromised_count = count
-                entry.compromised_checked_at = timezone.now()
             entry.save()
             form.save_m2m()
+            if pwd:
+                from apps.passwords.tasks import check_entry_hibp
+                check_entry_hibp.delay(entry.pk)
 
             from apps.audit.models import AuditLog
             AuditLog.objects.create(
@@ -324,14 +322,11 @@ def entry_edit(request, pk):
                 entry.version += 1
             if old_expires_at != entry.expires_at:
                 entry.expiry_notified_at = None
-            pwd_to_check = new_password if 'Contraseña' in changes else None
-            if pwd_to_check:
-                count = check_hibp(pwd_to_check)
-                entry.is_compromised = count > 0
-                entry.compromised_count = count
-                entry.compromised_checked_at = timezone.now()
             entry.save()
             form.save_m2m()
+            if pwd_to_check:
+                from apps.passwords.tasks import check_entry_hibp
+                check_entry_hibp.delay(entry.pk)
 
             from apps.audit.models import AuditLog
             AuditLog.objects.create(
