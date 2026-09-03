@@ -91,3 +91,14 @@ def check_expired_passwords_task():
     n1 = check_expired_passwords()
     n2 = check_expired_secrets()
     return n1 + n2
+
+
+@shared_task
+def notify_event_task(event_code, context=None, triggered_by=None,
+                      recipients=None, extra_recipients=None):
+    """Versión asíncrona de notify_event para no bloquear al usuario con SMTP."""
+    from .services import notify_event
+    return notify_event(
+        event_code, context=context, triggered_by=triggered_by,
+        recipients=recipients, extra_recipients=extra_recipients,
+    )
