@@ -127,19 +127,26 @@
             document.getElementById('sidebar').classList.toggle('collapsed');
         }
         let _confirmForm = null;
-        function ticoConfirm(message, formId, okClass) {
+        let _confirmOnOk = null;
+        function ticoConfirm(message, formId, okClass, onOk) {
             document.getElementById('confirmModalBody').textContent = message;
             document.getElementById('confirmModalTitle').textContent = 'Confirmar acción';
             const okBtn = document.getElementById('confirmModalOk');
             okBtn.className = 'btn ' + (okClass || 'btn-danger');
             _confirmForm = formId || null;
+            _confirmOnOk = typeof onOk === 'function' ? onOk : null;
             new bootstrap.Modal(document.getElementById('confirmModal')).show();
         }
         document.getElementById('confirmModalOk').addEventListener('click', function () {
+            if (_confirmOnOk) {
+                try { _confirmOnOk(); } catch (e) {}
+                _confirmOnOk = null;
+            }
             if (_confirmForm) {
                 const f = document.getElementById(_confirmForm);
                 if (f) f.submit();
             }
+            _confirmForm = null;
             const m = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
             if (m) m.hide();
         });

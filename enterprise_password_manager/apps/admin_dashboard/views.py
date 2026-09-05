@@ -543,7 +543,7 @@ API_ENDPOINT_DOCS = [
             {'name': 'group_id', 'in': 'query', 'required': False, 'description': 'Filtrar por grupo.'},
         ],
         'returns': [
-            'general_risk (0-100) / general_risk_label (Bajo/Medio/Alto/Crítico)',
+            'general_risk (0-100) / general_risk_label (Bajo/Moderado/Alto/Crítico), 100 = riesgo crítico',
             'avg_robustness / avg_robustness_label',
             'users_at_high_risk, users_with_duplicates, users_with_weak',
         ],

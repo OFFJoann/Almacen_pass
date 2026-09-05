@@ -1,5 +1,8 @@
 {% for entry in entries %}
-<tr>
+<tr data-entry-pk="{{ entry.pk }}" class="vault-row">
+    <td class="text-center align-middle">
+        <input type="checkbox" class="form-check-input m-0 row-checkbox" value="{{ entry.pk }}" aria-label="Seleccionar {{ entry.name }}">
+    </td>
     <td>
         <a href="{% url 'passwords:detail' entry.pk %}" class="text-decoration-none fw-medium">
             {% if entry.is_favorite %}<i class="bi bi-star-fill text-warning"></i>{% endif %}
