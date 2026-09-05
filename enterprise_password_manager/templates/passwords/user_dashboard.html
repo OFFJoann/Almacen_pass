@@ -1,12 +1,41 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Mi Panel{% endblock %}
+{% block title %}Centro de Seguridad{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tab-detail-scroll {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .tab-detail-row {
+        padding: .45rem .6rem;
+        border-radius: .375rem;
+        margin-bottom: .25rem;
+        transition: background-color .15s ease;
+    }
+    .tab-detail-row:hover { background-color: var(--bs-tertiary-bg); }
+    .tab-detail-row .text-truncate { color: var(--bs-body-color); }
+    .badge-tone-danger {
+        background-color: var(--bs-danger-bg-subtle);
+        color: var(--bs-danger);
+        border: 1px solid var(--bs-danger-border-subtle);
+        font-weight: 500;
+    }
+    .badge-tone-warning {
+        background-color: var(--bs-warning-bg-subtle);
+        color: var(--bs-warning-text-emphasis);
+        border: 1px solid var(--bs-warning-border-subtle);
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0"><i class="bi bi-speedometer2"></i> Mi Panel de Seguridad</h4>
+        <h4 class="mb-0"><i class="bi bi-speedometer2"></i> Centro de Seguridad</h4>
     </div>
 
     {% if emergency_contact_required %}
@@ -87,7 +116,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-6">
+        <div class="col-12">
             <div class="card shadow-sm h-100">
                 <div class="card-header">
                     <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Alertas de Seguridad</h6>
@@ -108,8 +137,8 @@
                             {% endif %}
                             {% if duplicate_groups %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span><i class="bi bi-files text-warning me-2"></i>Contraseñas reutilizadas</span>
-                                    <span class="badge bg-warning rounded-pill">{{ duplicate_groups|length }}</span>
+                                    <span><i class="bi bi-files text-danger me-2"></i>Contraseñas reutilizadas</span>
+                                    <span class="badge bg-danger rounded-pill">{{ duplicate_groups|length }}</span>
                                 </li>
                             {% endif %}
                             {% if expiring_soon > 0 %}
@@ -138,64 +167,11 @@
                             {% endif %}
                             {% if no_totp_count > 0 %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span><i class="bi bi-shield-lock text-warning me-2"></i>Entradas sin 2FA configurado</span>
-                                    <span class="badge bg-warning rounded-pill">{{ no_totp_count }}</span>
+                                    <span><i class="bi bi-shield-lock text-danger me-2"></i>Entradas sin 2FA configurado</span>
+                                    <span class="badge bg-danger rounded-pill">{{ no_totp_count }}</span>
                                 </li>
                             {% endif %}
                         </ul>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header">
-                    <h6 class="mb-0"><i class="bi bi-shield-lock"></i> Contraseñas sin 2FA</h6>
-                </div>
-                <div class="card-body">
-                    {% if no_totp_entries %}
-                        <div class="mb-2">
-                            <strong>{{ no_totp_count }}</strong> entrada{{ no_totp_count|pluralize:'s' }} no tiene{{ no_totp_count|pluralize:'n' }} un segundo factor configurado:
-                        </div>
-                        <div class="d-flex flex-wrap gap-2">
-                            {% for entry in no_totp_entries %}
-                                <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none p-2">
-                                    <i class="bi bi-shield-x me-1"></i>{{ entry.name }}
-                                </a>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center text-success py-3">
-                            <i class="bi bi-shield-check fs-1"></i>
-                            <p class="mt-2 mb-0">Todas tus entradas tienen 2FA configurado.</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header">
-                    <h6 class="mb-0"><i class="bi bi-files"></i> Contraseñas Reutilizadas</h6>
-                </div>
-                <div class="card-body">
-                    {% if duplicate_groups %}
-                        {% for group in duplicate_groups %}
-                            <div class="mb-2 p-2 bg-body-tertiary rounded">
-                                <small class="text-muted">Usada en {{ group|length }} entradas:</small>
-                                {% for entry in group %}
-                                    <a href="{% url 'passwords:detail' entry.pk %}" class="badge bg-warning text-decoration-none p-2 me-1">
-                                        <i class="bi bi-files me-1"></i>{{ entry.name }}
-                                    </a>
-                                {% endfor %}
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="text-center text-muted py-3">
-                            <i class="bi bi-check-circle fs-1"></i>
-                            <p class="mt-2 mb-0">No se detectaron contraseñas reutilizadas.</p>
-                        </div>
                     {% endif %}
                 </div>
             </div>
@@ -269,6 +245,115 @@
                             </div>
                         {% endfor %}
                     {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-key"></i> Revisión de Contraseñas</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-pills gap-2 mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-reused" type="button" role="tab">
+                                <i class="bi bi-files me-1"></i> Reutilizadas
+                                <span class="badge {{ duplicate_groups|default:''|yesno:'bg-danger,bg-secondary' }} rounded-pill ms-1">{{ reused_detail|length }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-nototp" type="button" role="tab">
+                                <i class="bi bi-shield-x me-1"></i> Sin 2FA
+                                <span class="badge {{ no_totp_count|yesno:'bg-danger,bg-secondary' }} rounded-pill ms-1">{{ no_totp_count }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-darkweb" type="button" role="tab">
+                                <i class="bi bi-shield-shaded me-1"></i> DarkWeb
+                                <span class="badge {{ compromised_count|yesno:'bg-danger,bg-secondary' }} rounded-pill ms-1">{{ compromised_count }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-weak" type="button" role="tab">
+                                <i class="bi bi-emoji-dizzy me-1"></i> Más Débiles
+                                <span class="badge {{ weak_passwords_count|yesno:'bg-danger,bg-secondary' }} rounded-pill ms-1">{{ weak_passwords_count }}</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="tab-reused" role="tabpanel">
+                            {% if reused_detail %}
+                                <div class="tab-detail-scroll">
+                                    {% for item in reused_detail|slice:":10" %}
+                                        <a href="{% url 'passwords:detail' item.entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <i class="bi bi-files text-danger"></i>
+                                                <span class="text-truncate">{{ item.entry.name }}</span>
+                                            </span>
+                                            <span class="badge badge-tone-danger rounded-pill flex-shrink-0">Reutilizada {{ item.count }} veces</span>
+                                        </a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-center text-muted py-4 mb-0"><i class="bi bi-check-circle text-success fs-3 d-block mb-2"></i>No hay contraseñas reutilizadas.</p>
+                            {% endif %}
+                        </div>
+                        <div class="tab-pane fade" id="tab-nototp" role="tabpanel">
+                            {% if no_totp_entries %}
+                                <div class="tab-detail-scroll">
+                                    {% for entry in no_totp_entries|slice:":10" %}
+                                        <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <i class="bi bi-shield-x text-warning"></i>
+                                                <span class="text-truncate">{{ entry.name }}</span>
+                                            </span>
+                                            <span class="badge badge-tone-warning rounded-pill flex-shrink-0">Sin 2FA</span>
+                                        </a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-center text-muted py-4 mb-0"><i class="bi bi-shield-check text-success fs-3 d-block mb-2"></i>Todas tus entradas tienen 2FA.</p>
+                            {% endif %}
+                        </div>
+                        <div class="tab-pane fade" id="tab-darkweb" role="tabpanel">
+                            {% if compromised_entries %}
+                                <div class="tab-detail-scroll">
+                                    {% for entry in compromised_entries|slice:":10" %}
+                                        <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <i class="bi bi-shield-shaded text-danger"></i>
+                                                <span class="text-truncate">{{ entry.name }}</span>
+                                            </span>
+                                            <span class="badge badge-tone-danger rounded-pill flex-shrink-0">Filtrada</span>
+                                        </a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-center text-muted py-4 mb-0"><i class="bi bi-shield-check text-success fs-3 d-block mb-2"></i>No se detectaron filtraciones.</p>
+                            {% endif %}
+                        </div>
+                        <div class="tab-pane fade" id="tab-weak" role="tabpanel">
+                            {% if weak_entries %}
+                                <div class="tab-detail-scroll">
+                                    {% for entry in weak_entries|slice:":10" %}
+                                        <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <i class="bi bi-emoji-dizzy text-danger"></i>
+                                                <span class="text-truncate">{{ entry.name }}</span>
+                                            </span>
+                                            <span class="badge badge-tone-danger rounded-pill flex-shrink-0">{{ entry.password_strength }}</span>
+                                        </a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-center text-muted py-4 mb-0"><i class="bi bi-emoji-smile text-success fs-3 d-block mb-2"></i>No hay contraseñas débiles.</p>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,11 +1,12 @@
 import json
 import csv
 import io
+import uuid
 from collections import Counter
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.http import JsonResponse, HttpResponse
@@ -117,6 +118,15 @@ def vault_view(request):
     folder_flat = flatten_folder_tree(folder_tree)
     all_count = all_entries.count()
 
+    from apps.users.models import User as AppUser, Group as AppGroup
+    users_available = AppUser.objects.filter(is_active=True).exclude(pk=request.user.pk).order_by('email')
+    groups_available = AppGroup.objects.all().order_by('name')
+
+    # URL que conserva los demás filtros de la bóveda pero retira solo la categoría.
+    clear_qs = request.GET.copy()
+    clear_qs.pop('category', None)
+    clear_category_url = '?' + clear_qs.urlencode() if clear_qs else ''
+
     filtered = _base_vault_entries(request, vault)
     total_entries = filtered.count()
     initial_count = 20
@@ -148,6 +158,8 @@ def vault_view(request):
         'vault': vault,
         'folder_tree': folder_tree,
         'folder_flat': folder_flat,
+        'users_available': users_available,
+        'groups_available': groups_available,
         'all_count': all_count,
         'categories': categories,
         'tags': tags,
@@ -157,6 +169,7 @@ def vault_view(request):
         'shared_entries': shared_with_me,
         'active_folder': folder_id,
         'active_category': category_id,
+        'clear_category_url': clear_category_url,
         'active_tag': tag_id,
         'search': search,
         'active_sensitivity': sensitivity,
@@ -1226,6 +1239,161 @@ def entry_move_folder(request, pk):
     return JsonResponse({'status': 'ok', 'folder': folder.name if folder else ''})
 
 
+def _bulk_entry_queryset(request, ids):
+    """Devuelve los registros propios (no eliminados/obsoletos) para una acción
+    en lote. Ignora ids no válidos o que no pertenezcan al usuario."""
+    if not ids:
+        return PasswordEntry.objects.none()
+    valid = []
+    for raw in ids:
+        try:
+            uuid.UUID(str(raw))
+            valid.append(raw)
+        except (ValueError, TypeError):
+            continue
+    return PasswordEntry.objects.filter(
+        pk__in=valid, vault__user=request.user,
+        is_deleted=False, is_obsolete=False,
+    )
+
+
+@login_required
+@require_POST
+def bulk_move_folder(request):
+    """Mueve varios registros a una carpeta en una sola operación."""
+    data = json.loads(request.body or '{}')
+    ids = data.get('ids', [])
+    folder_id = data.get('folder', '')
+    entries = _bulk_entry_queryset(request, ids)
+    folder = None
+    if folder_id:
+        try:
+            folder = Folder.objects.get(pk=folder_id, user=request.user)
+        except (Folder.DoesNotExist, ValueError, ValidationError):
+            return JsonResponse({'status': 'error', 'message': _('Carpeta no válida')})
+    count = entries.update(folder=folder)
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='ENTRIES_BULK_MOVED',
+        details=f'Moved {count} entries to folder "{folder.name if folder else "Sin carpeta"}"',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    return JsonResponse({'status': 'ok', 'count': count})
+
+
+@login_required
+@require_POST
+def bulk_delete(request):
+    """Mueve varios registros a la papelera en una sola operación."""
+    data = json.loads(request.body or '{}')
+    ids = data.get('ids', [])
+    entries = list(_bulk_entry_queryset(request, ids))
+    now = timezone.now()
+    count = 0
+    for entry in entries:
+        entry.is_deleted = True
+        entry.deleted_at = now
+        entry.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
+        count += 1
+        from apps.mailer.tasks import notify_event_task
+        notify_event_task.delay('password_deleted', {
+            'usuario': request.user.email,
+            'nombre_servicio': entry.name,
+            'dominio': domain_from_url(entry.url),
+        }, recipients=[request.user.email])
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='ENTRIES_BULK_DELETED',
+        details=f'Moved {count} entries to trash',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    return JsonResponse({'status': 'ok', 'count': count})
+
+
+@login_required
+@require_POST
+def bulk_share(request):
+    """Comparte varios registros con el mismo destinatario/permiso/duración."""
+    data = json.loads(request.body or '{}')
+    ids = data.get('ids', [])
+    entries = list(_bulk_entry_queryset(request, ids))
+    if not entries:
+        return JsonResponse({'status': 'error', 'message': _('No hay registros seleccionados')})
+
+    form = ShareForm(
+        {
+            'shared_with_user': data.get('shared_with_user', ''),
+            'shared_with_group': data.get('shared_with_group', ''),
+            'permission': data.get('permission', 'read'),
+            'expires_at': data.get('expires_at', ''),
+        },
+        user=request.user,
+    )
+    if not form.is_valid():
+        return JsonResponse({'status': 'error', 'message': _('Revisa los datos de compartición')})
+
+    target_user = form.cleaned_data.get('shared_with_user')
+    target_group = form.cleaned_data.get('shared_with_group')
+    permission = form.cleaned_data.get('permission')
+    expires_at = form.cleaned_data.get('expires_at')
+
+    created = updated = 0
+    for entry in entries:
+        existing = None
+        if target_user:
+            existing = Share.objects.filter(
+                entry=entry, is_revoked=False, shared_with_user=target_user
+            ).first()
+        elif target_group:
+            existing = Share.objects.filter(
+                entry=entry, is_revoked=False, shared_with_group=target_group
+            ).first()
+        if existing:
+            existing.permission = permission
+            existing.expires_at = expires_at
+            existing.save(update_fields=['permission', 'expires_at'])
+            updated += 1
+        else:
+            share = Share(
+                entry=entry,
+                shared_by=request.user,
+                shared_with_user=target_user,
+                shared_with_group=target_group,
+                permission=permission,
+                expires_at=expires_at,
+            )
+            share.save()
+            created += 1
+
+    target = target_user.email if target_user else target_group.name
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='ENTRIES_BULK_SHARED',
+        details=f'Shared {len(entries)} entries with {target}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    recipients = []
+    if target_user and target_user.email:
+        recipients.append(target_user.email)
+    elif target_group:
+        recipients = [u.email for u in target_group.members.filter(is_active=True) if u.email]
+    from apps.mailer.tasks import notify_event_task
+    notify_event_task.delay('password_shared', {
+        'compartido_por': request.user.email,
+        'compartido_con': target,
+        'nombre_servicio': f'{len(entries)} registro(s)',
+        'url': '/',
+    }, recipients=recipients)
+
+    return JsonResponse({'status': 'ok', 'created': created, 'updated': updated, 'count': len(entries)})
+
+
 def folder_create(request):
     parent_id = request.GET.get('parent') or request.POST.get('parent')
     parent = None
@@ -1525,6 +1693,14 @@ def user_dashboard(request):
         if e.password_strength and e.password_strength in ('Débil', 'Muy Débil')
     )
 
+    weak_entries = [
+        e for e in entries
+        if e.password_strength and e.password_strength in ('Débil', 'Muy Débil')
+    ]
+    weak_entries.sort(key=lambda e: e.password_entropy or 0)
+
+    compromised_entries = [e for e in entries if e.is_compromised]
+
     hmac_counter = Counter(e.password_hmac for e in entries if e.password_hmac)
     duplicate_hmacs = {h for h, count in hmac_counter.items() if count > 1}
 
@@ -1535,6 +1711,12 @@ def user_dashboard(request):
             if entry.password_hmac in duplicate_hmacs:
                 dup_entries_by_hmac.setdefault(entry.password_hmac, []).append(entry)
         duplicate_groups = list(dup_entries_by_hmac.values())
+
+    reused_detail = []
+    for group in duplicate_groups:
+        for entry in group:
+            reused_detail.append({'entry': entry, 'count': len(group)})
+    reused_detail.sort(key=lambda item: item['count'], reverse=True)
 
     from apps.audit.models import AuditLog
     from apps.users.models import LoginHistory
@@ -1551,26 +1733,26 @@ def user_dashboard(request):
     if entropy_values:
         avg_entropy = sum(entropy_values) / len(entropy_values)
 
-    score = 100
-    score -= min(weak_passwords_count * 20, 50)
-    score -= 25 if duplicate_groups else 0
-    score -= 25 if not request.user.mfa_enabled else 0
-    score -= min(compromised_count * 15, 30)
+    score = 0
+    score += min(weak_passwords_count * 20, 50)
+    score += 25 if duplicate_groups else 0
+    score += 25 if not request.user.mfa_enabled else 0
+    score += min(compromised_count * 15, 30)
 
     total_risk_score = max(0, min(100, score))
 
     if total_risk_score >= 80:
-        risk_label = 'Bajo'
-        risk_color = 'success'
-    elif total_risk_score >= 60:
-        risk_label = 'Moderado'
-        risk_color = 'warning'
-    elif total_risk_score >= 40:
-        risk_label = 'Alto'
-        risk_color = 'danger'
-    else:
         risk_label = 'Crítico'
         risk_color = 'danger'
+    elif total_risk_score >= 60:
+        risk_label = 'Alto'
+        risk_color = 'danger'
+    elif total_risk_score >= 40:
+        risk_label = 'Moderado'
+        risk_color = 'warning'
+    else:
+        risk_label = 'Bajo'
+        risk_color = 'success'
 
     max_entropy = 140
     robustness_pct = min(100, round((avg_entropy / max_entropy) * 100)) if total_entries > 0 else 0
@@ -1612,6 +1794,9 @@ def user_dashboard(request):
         'no_totp_count': no_totp_count,
         'no_totp_entries': no_totp_entries,
         'weak_passwords_count': weak_passwords_count,
+        'weak_entries': weak_entries,
+        'compromised_entries': compromised_entries,
+        'reused_detail': reused_detail,
         'duplicate_groups': duplicate_groups,
         'total_risk_score': round(total_risk_score, 1),
         'risk_label': risk_label,

@@ -4,4 +4,4 @@ class AdminDashboardConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.admin_dashboard'
     label = 'admin_dashboard'
-    verbose_name = 'Panel de Administración'
+    verbose_name = 'Seguridad Empresarial'

@@ -17,7 +17,7 @@
         <li class="nav-item">
             <a href="{% url 'passwords:dashboard' %}" class="nav-link {% if request.resolver_match.namespace == 'passwords' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" data-tour="dashboard">
                 <i class="bi bi-speedometer2"></i>
-                <span class="sidebar-text">Mi Panel</span>
+                <span class="sidebar-text">Centro de Seguridad</span>
             </a>
         </li>
         <li class="nav-item">
@@ -71,7 +71,7 @@
             <li class="nav-item">
                 <a href="{% url 'admin_dashboard:dashboard' %}" class="nav-link {% if request.resolver_match.namespace == 'admin_dashboard' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
                     <i class="bi bi-speedometer2"></i>
-                    <span class="sidebar-text">Panel</span>
+                    <span class="sidebar-text">Seguridad Empresarial</span>
                 </a>
             </li>
             <li class="nav-item">

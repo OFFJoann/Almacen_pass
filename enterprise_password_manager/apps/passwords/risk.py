@@ -24,11 +24,11 @@ def compute_user_risk(user):
     if entropy_values:
         avg_entropy = sum(entropy_values) / len(entropy_values)
 
-    score = 100
-    score -= min(weak_passwords_count * 20, 50)
-    score -= 25 if has_duplicates else 0
-    score -= 25 if not user.mfa_enabled else 0
-    score -= min(compromised_count * 15, 30)
+    score = 0
+    score += min(weak_passwords_count * 20, 50)
+    score += 25 if has_duplicates else 0
+    score += 25 if not user.mfa_enabled else 0
+    score += min(compromised_count * 15, 30)
     total_risk_score = max(0, min(100, score))
 
     max_entropy = 140
@@ -51,12 +51,12 @@ def compute_user_risk(user):
 
 def risk_label(score):
     if score >= 80:
-        return 'Bajo', 'success'
+        return 'Crítico', 'danger'
     if score >= 60:
-        return 'Moderado', 'warning'
-    if score >= 40:
         return 'Alto', 'danger'
-    return 'Crítico', 'danger'
+    if score >= 40:
+        return 'Moderado', 'warning'
+    return 'Bajo', 'success'
 
 
 def robustness_label(pct):

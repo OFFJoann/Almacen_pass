@@ -16,17 +16,103 @@
         z-index: 2;
         box-shadow: inset 0 -1px 0 var(--bs-border-color);
     }
-    .folder-children {
-        margin-left: 1.05rem;
-        border-left: 2px solid var(--bs-border-color);
-        padding-left: .15rem;
+    .organizer-scroll {
+        max-height: calc(10 * 1.7rem);
+        overflow-y: auto;
     }
-    .folder-children .list-group-item { border: none; border-radius: 0; }
+    .organizer-search:not(:placeholder-shown) {
+        border-color: var(--bs-primary);
+    }
+    .tree-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .25rem;
+        padding: .22rem .5rem;
+        border-radius: .375rem;
+        transition: background-color .15s ease;
+    }
+    .tree-item:hover { background-color: var(--bs-tertiary-bg); }
+    .tree-item.active { background-color: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+    .tree-item.active .tree-name { color: var(--bs-primary); font-weight: 500; }
+    .tree-root {
+        font-weight: 600;
+        padding: .28rem .5rem;
+        border-radius: .375rem;
+        transition: background-color .15s ease;
+    }
+    .tree-root:hover { background-color: var(--bs-tertiary-bg); }
+    .tree-root.active { background-color: var(--bs-primary); color: #fff; }
+    .tree-root.active .tree-name { color: #fff; }
+    .tree-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+        display: inline-block;
+    }
+    .tree-actions {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        opacity: .7;
+        transition: opacity .15s ease;
+    }
+    .tree-item:hover .tree-actions { opacity: 1; }
+    .folder-children {
+        margin-left: 1rem;
+        border-left: 1px solid var(--bs-border-color);
+        padding-left: .4rem;
+    }
+    .folder-children .tree-item { border: none; }
     .folder-children.collapsed { display: none; }
-    .folder-toggle { cursor: pointer; font-size: .8rem; width: 1rem; text-align: center; }
-    .folder-toggle-placeholder { display: inline-block; width: 1rem; }
+    .folder-children.closing { display: none; }
+    .folder-toggle { cursor: pointer; font-size: .8rem; width: 1rem; text-align: center; flex: 0 0 auto; }
+    .folder-toggle-placeholder { display: inline-block; width: 1rem; flex: 0 0 auto; }
+    .folder-node { position: relative; }
+    .folder-row {
+        padding: .22rem .5rem;
+        line-height: 1.3;
+        gap: .25rem;
+    }
+    .folder-row .folder-actions {
+        flex: 0 0 auto;
+    }
+    .folder-row .folder-icon { color: var(--bs-body-color); }
+    .folder-child-indent { display: flex; flex-direction: column; }
+    .folder-children > .folder-node > .folder-row {
+        position: relative;
+        margin-left: .7rem;
+        padding-left: .8rem;
+    }
+    .folder-children > .folder-node > .folder-row::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 50%;
+        width: .7rem;
+        height: 1px;
+        background: var(--bs-border-color);
+    }
+    .tree-hidden { display: none !important; }
     .spin { display: inline-block; animation: tico-spin 1s linear infinite; }
     @keyframes tico-spin { to { transform: rotate(360deg); } }
+    @keyframes tico-fade-down {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .folder-open-anim > .folder-children { animation: tico-fade-down .18s ease; }
+    .bulk-toolbar {
+        background-color: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+    }
+    .vault-row.selected {
+        background-color: var(--bs-primary-bg-subtle);
+    }
+    .vault-row.selected td:first-child { box-shadow: inset 3px 0 0 var(--bs-primary); }
+    .row-checkbox, #selectAll { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -51,26 +137,43 @@
         <div class="card shadow-sm">
             <div class="card-body">
                 <h6 class="card-title"><i class="bi bi-folder"></i> Carpetas</h6>
-                <div class="list-group list-group-flush">
-                    <a href="{% url 'passwords:vault' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if not active_folder %}active{% endif %}">
-                        Todos los Elementos
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control organizer-search" id="folderSearch" placeholder="Buscar carpetas...">
+                </div>
+                <div class="organizer-scroll" id="vaultFolders">
+                    <div class="tree-item tree-root d-flex justify-content-between align-items-center {% if not active_folder %}active{% endif %}" id="vaultFoldersRoot">
+                        <a href="{% url 'passwords:vault' %}" class="text-decoration-none flex-grow-1 tree-name">Todos los Elementos</a>
                         <span class="badge bg-primary rounded-pill">{{ all_count }}</span>
-                    </a>
+                    </div>
                     {% include 'passwords/includes/folder_node.html' with nodes=folder_tree active_folder=active_folder %}
                 </div>
             </div>
         </div>
         <div class="card shadow-sm mt-3">
             <div class="card-body">
-                <h6 class="card-title"><i class="bi bi-tag"></i> Categorías</h6>
-                <div class="list-group list-group-flush">
-                    <a href="{% url 'passwords:vault' %}" class="list-group-item list-group-item-action {% if not active_category %}active{% endif %}">Todas</a>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0"><i class="bi bi-tag"></i> Categorías</h6>
+                    {% if active_category %}
+                        <a href="{% url 'passwords:vault' %}{{ clear_category_url }}" class="btn btn-sm btn-outline-secondary" title="Retirar filtro de categoría">
+                            <i class="bi bi-x-lg"></i> Retirar filtro
+                        </a>
+                    {% endif %}
+                </div>
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control organizer-search" id="categorySearch" placeholder="Buscar categorías...">
+                </div>
+                <div class="organizer-scroll" id="vaultCategories">
+                    <div class="tree-item tree-root d-flex justify-content-between align-items-center {% if not active_category %}active{% endif %}">
+                        <a href="{% url 'passwords:vault' %}{{ clear_category_url }}" class="text-decoration-none flex-grow-1 tree-name">Todas</a>
+                    </div>
                     {% for cat in categories %}
-                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if active_category == cat.id|stringformat:'s' %}active{% endif %}">
-                            <a href="{% url 'passwords:vault' %}?category={{ cat.id }}" class="text-decoration-none flex-grow-1 {% if active_category == cat.id|stringformat:'s' %}text-white{% endif %}">
-                                {{ cat.name }}
+                        <div class="tree-item {% if active_category == cat.id|stringformat:'s' %}active{% endif %}">
+                            <a href="{% url 'passwords:vault' %}?category={{ cat.id }}" class="text-decoration-none flex-grow-1 d-flex align-items-center gap-1 tree-name">
+                                <i class="bi bi-tag"></i> {{ cat.name }}
                             </a>
-                            <a href="{% url 'passwords:category_delete' cat.id %}" class="text-danger ms-2" title="Eliminar categoría"><i class="bi bi-trash"></i></a>
+                            <a href="{% url 'passwords:category_delete' cat.id %}" class="text-danger" title="Eliminar categoría"><i class="bi bi-trash"></i></a>
                         </div>
                     {% endfor %}
                 </div>
@@ -106,10 +209,22 @@
                 </div>
 
                 {% if entries %}
+                    <div class="bulk-toolbar d-none align-items-center gap-2 flex-wrap mb-2 p-2 rounded-3" id="bulkToolbar" data-tour="bulk-actions">
+                        <span class="badge bg-primary rounded-pill" id="bulkCount">0</span>
+                        <span class="small text-muted">seleccionados</span>
+                        <span class="vr"></span>
+                        <button type="button" class="btn btn-sm btn-outline-warning" id="bulkMoveBtn" title="Mover a una carpeta"><i class="bi bi-folder-symlink"></i> Mover</button>
+                        <button type="button" class="btn btn-sm btn-outline-info" id="bulkShareBtn" title="Compartir"><i class="bi bi-share"></i> Compartir</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="bulkDeleteBtn" title="Mover a la papelera"><i class="bi bi-trash"></i> Eliminar</button>
+                        <button type="button" class="btn btn-sm btn-link ms-auto" id="bulkClearBtn"><i class="bi bi-x-lg"></i> Limpiar</button>
+                    </div>
                     <div class="table-responsive vault-scroll" data-tour="entry-actions">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
+                                    <th class="text-center" style="width:2rem">
+                                        <input type="checkbox" class="form-check-input m-0" id="selectAll" aria-label="Seleccionar todos">
+                                    </th>
                                     <th>Nombre</th>
                                     <th>Usuario</th>
                                     <th>Carpeta</th>
@@ -216,6 +331,56 @@
     </div>
 </div>
 
+<div class="modal fade" id="bulkShareModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-share"></i> Compartir selección</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Se compartirá <span id="bulkShareCount" class="fw-semibold">0</span> registro(s) con la misma configuración.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Compartir con usuario</label>
+                    <select class="form-control select2" id="bulkShareUser">
+                        <option value="">Selecciona un usuario...</option>
+                        {% for u in users_available %}
+                            <option value="{{ u.id }}">{{ u.email }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">O compartir con grupo</label>
+                    <select class="form-control" id="bulkShareGroup">
+                        <option value="">Selecciona un grupo...</option>
+                        {% for g in groups_available %}
+                            <option value="{{ g.id }}">{{ g.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Permiso</label>
+                    <select class="form-control" id="bulkSharePermission">
+                        <option value="read">Solo Lectura</option>
+                        <option value="write">Puede Editar</option>
+                        <option value="reshare">Puede Re-compartir</option>
+                    </select>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label">Expira (opcional)</label>
+                    <input type="datetime-local" class="form-control" id="bulkShareExpires">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="bulkShareConfirm">Compartir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="editEntryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
         <div class="modal-content">
@@ -290,14 +455,76 @@
         setTimeout(loadMore, 200);
     })();
 
-    function toggleFolder(icon) {
+    function toggleFolder(icon, ev) {
+        if (ev) ev.preventDefault();
         const node = icon.closest('.folder-node');
         const children = node ? node.querySelector(':scope > .folder-children') : null;
         if (!children) return;
-        children.classList.toggle('collapsed');
+        const isCollapsed = children.classList.contains('collapsed');
         icon.classList.toggle('bi-chevron-down');
         icon.classList.toggle('bi-chevron-right');
+        if (isCollapsed) {
+            node.classList.add('folder-open-anim');
+            children.classList.remove('collapsed');
+            setTimeout(function () { node.classList.remove('folder-open-anim'); }, 200);
+        } else {
+            children.classList.add('collapsed');
+        }
     }
+
+    // ---------- Búsqueda de carpetas (filtro en cliente) ----------
+    (function () {
+        const input = document.getElementById('folderSearch');
+        if (!input) return;
+        input.addEventListener('input', function () {
+            const q = input.value.trim().toLowerCase();
+            var any = false;
+            function visitNode(node) {
+                const label = node.querySelector('.tree-name-label');
+                const name = label ? label.textContent.trim().toLowerCase() : '';
+                const selfMatch = !q || name.indexOf(q) !== -1;
+                const childContainer = node.querySelector(':scope > .folder-children');
+                var childVisible = false;
+                if (childContainer) {
+                    Array.prototype.forEach.call(childContainer.querySelectorAll(':scope > .folder-node'), function (c) {
+                        if (visitNode(c)) childVisible = true;
+                    });
+                }
+                const show = selfMatch || (q && childVisible);
+                node.classList.toggle('tree-hidden', !show);
+                if (q && show && childContainer) {
+                    childContainer.classList.remove('collapsed');
+                    const ic = node.querySelector(':scope > .folder-toggle');
+                    if (ic) { ic.classList.remove('bi-chevron-right'); ic.classList.add('bi-chevron-down'); }
+                }
+                if (show) any = true;
+                return show;
+            }
+            Array.prototype.forEach.call(document.querySelectorAll('#vaultFolders > .folder-node'), visitNode);
+            var root = document.getElementById('vaultFoldersRoot');
+            if (root) root.classList.toggle('tree-hidden', q && ('todos los elementos'.indexOf(q) === -1));
+        });
+    })();
+
+    // ---------- Búsqueda de categorías (filtro en cliente) ----------
+    (function () {
+        const input = document.getElementById('categorySearch');
+        if (!input) return;
+        input.addEventListener('input', function () {
+            const q = input.value.trim().toLowerCase();
+            var any = false;
+            document.querySelectorAll('#vaultCategories .tree-item').forEach(function (item) {
+                if (item.classList.contains('tree-root')) return;
+                var name = item.querySelector('.tree-name');
+                var text = name ? name.textContent.trim().toLowerCase() : '';
+                var match = !q || text.indexOf(q) !== -1;
+                item.classList.toggle('tree-hidden', !match);
+                if (match) any = true;
+            });
+            var root = document.querySelector('#vaultCategories .tree-root');
+            if (root) root.classList.toggle('tree-hidden', q && !('Todas'.toLowerCase().indexOf(q) !== -1));
+        });
+    })();
 
     async function copyEntryData(pk, field) {
         try {
@@ -323,9 +550,31 @@
         new bootstrap.Modal(document.getElementById('moveFolderModal')).show();
     }
     document.getElementById('moveFolderConfirm').addEventListener('click', function () {
-        if (!moveEntryPk) return;
         const folderId = document.getElementById('moveFolderSelect').value;
         const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        if (bulkMode) {
+            const ids = selectedIds();
+            if (!ids.length) return;
+            fetch("{% url 'passwords:bulk_move_folder' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids, folder: folderId })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                const m = bootstrap.Modal.getInstance(document.getElementById('moveFolderModal'));
+                if (m) m.hide();
+                if (data.status === 'ok') {
+                    showToast(data.count + ' registro(s) movidos de carpeta', 'success');
+                    location.reload();
+                } else {
+                    showToast(data.message || 'No se pudo mover', 'danger');
+                }
+            })
+            .catch(function () { showToast('No se pudo mover', 'danger'); });
+            return;
+        }
+        if (!moveEntryPk) return;
         fetch('/vault/entry/' + moveEntryPk + '/move-folder/', {
             method: 'POST',
             headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -343,6 +592,140 @@
             }
         })
         .catch(function () { showToast('No se pudo mover', 'danger'); });
+    });
+
+    // ---------- Selección múltiple y acciones en lote ----------
+    let bulkMode = false;
+    const selected = {}; // pk -> true
+
+    window.selectedIds = function () {
+        const keys = Object.keys(selected).filter(function (k) { return selected[k]; });
+        return keys.filter(function (k) { return document.querySelector('.row-checkbox[value="' + k + '"]'); });
+    };
+
+    function updateBulkUi() {
+        const toolbar = document.getElementById('bulkToolbar');
+        if (!toolbar) return;
+        const count = window.selectedIds().length;
+        document.getElementById('bulkCount').textContent = count;
+        if (count > 0) {
+            bulkMode = true;
+            toolbar.classList.remove('d-none');
+            toolbar.classList.add('d-flex');
+        } else {
+            bulkMode = false;
+            toolbar.classList.add('d-none');
+            toolbar.classList.remove('d-flex');
+        }
+        const all = document.getElementById('selectAll');
+        if (all) all.checked = count > 0 && count === document.querySelectorAll('.row-checkbox').length;
+    }
+
+    function syncRow(cb) {
+        const row = cb.closest('tr');
+        if (!row) return;
+        if (cb.checked) {
+            selected[cb.value] = true;
+            row.classList.add('selected');
+        } else {
+            delete selected[cb.value];
+            row.classList.remove('selected');
+        }
+        updateBulkUi();
+    }
+
+    // Delegación: la fila puede llegar por carga progresiva.
+    document.getElementById('entriesBody').addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('row-checkbox')) {
+            syncRow(e.target);
+        }
+    });
+
+    const selectAll = document.getElementById('selectAll');
+    if (selectAll) selectAll.addEventListener('change', function () {
+        document.querySelectorAll('.row-checkbox').forEach(function (cb) {
+            cb.checked = selectAll.checked;
+            syncRow(cb);
+        });
+    });
+
+    const bulkClearBtn = document.getElementById('bulkClearBtn');
+    if (bulkClearBtn) bulkClearBtn.addEventListener('click', function () {
+        document.querySelectorAll('.row-checkbox').forEach(function (cb) {
+            cb.checked = false;
+            syncRow(cb);
+        });
+    });
+
+    const bulkMoveBtn = document.getElementById('bulkMoveBtn');
+    if (bulkMoveBtn) bulkMoveBtn.addEventListener('click', function () {
+        if (!window.selectedIds().length) return;
+        new bootstrap.Modal(document.getElementById('moveFolderModal')).show();
+    });
+
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click', function () {
+        const ids = window.selectedIds();
+        if (!ids.length) return;
+        ticoConfirm('¿Eliminar ' + ids.length + ' registro(s)? Se moverán a la papelera.', null, 'btn-danger', function () {
+            const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            fetch("{% url 'passwords:bulk_delete' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.status === 'ok') {
+                    showToast(data.count + ' registro(s) movidos a la papelera', 'success');
+                    location.reload();
+                } else {
+                    showToast(data.message || 'No se pudo eliminar', 'danger');
+                }
+            })
+            .catch(function () { showToast('No se pudo eliminar', 'danger'); });
+        });
+    });
+
+    const bulkShareBtn = document.getElementById('bulkShareBtn');
+    if (bulkShareBtn) bulkShareBtn.addEventListener('click', function () {
+        const ids = window.selectedIds();
+        if (!ids.length) return;
+        document.getElementById('bulkShareCount').textContent = ids.length;
+        new bootstrap.Modal(document.getElementById('bulkShareModal')).show();
+    });
+
+    const bulkShareConfirm = document.getElementById('bulkShareConfirm');
+    if (bulkShareConfirm) bulkShareConfirm.addEventListener('click', function () {
+        const ids = window.selectedIds();
+        if (!ids.length) return;
+        const user = document.getElementById('bulkShareUser').value;
+        const group = document.getElementById('bulkShareGroup').value;
+        if (!user && !group) { showToast('Selecciona un usuario o grupo para compartir', 'danger'); return; }
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch("{% url 'passwords:bulk_share' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ids: ids,
+                shared_with_user: user,
+                shared_with_group: group,
+                permission: document.getElementById('bulkSharePermission').value,
+                expires_at: document.getElementById('bulkShareExpires').value
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            const m = bootstrap.Modal.getInstance(document.getElementById('bulkShareModal'));
+            if (m) m.hide();
+            if (data.status === 'ok') {
+                showToast(data.count + ' registro(s) compartidos', 'success');
+                location.reload();
+            } else {
+                showToast(data.message || 'No se pudo compartir', 'danger');
+            }
+        })
+        .catch(function () { showToast('No se pudo compartir', 'danger'); });
     });
 
     // ---------- Modales de Editar / Compartir (AJAX) ----------
@@ -419,7 +802,7 @@
             },
             {
                 selector: '[data-tour="dashboard"]',
-                title: 'Mi Panel',
+                title: 'Centro de Seguridad',
                 text: 'Tu resumen personal de seguridad: fortaleza de tus contraseñas, vencimientos próximos, 2FA, filtraciones y actividad reciente.',
             },
             {

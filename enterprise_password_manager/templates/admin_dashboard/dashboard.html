@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Panel Admin - Administrador de Contraseñas{% endblock %}
+{% block title %}Seguridad Empresarial{% endblock %}
 
 {% block content %}
-<h4 class="mb-4"><i class="bi bi-speedometer2"></i> Panel de Administración</h4>
+<h4 class="mb-4"><i class="bi bi-speedometer2"></i> Seguridad Empresarial</h4>
 
 <form method="get" class="row g-2 align-items-end mb-4">
     <div class="col-md-4">
@@ -163,7 +163,7 @@
                                 <tr>
                                     <td><small>{{ r.user.email }}</small></td>
                                     <td>
-                                        <span class="badge bg-{% if r.total_risk_score >= 80 %}success{% elif r.total_risk_score >= 60 %}warning{% else %}danger{% endif %}">{{ r.total_risk_score }}%</span>
+                                        <span class="badge bg-{% if r.total_risk_score >= 60 %}danger{% elif r.total_risk_score >= 40 %}warning{% else %}success{% endif %}">{{ r.total_risk_score }}%</span>
                                     </td>
                                     <td><small>{{ r.robustness_pct }}%</small></td>
                                     <td><small>{{ r.weak_passwords_count }}</small></td>
