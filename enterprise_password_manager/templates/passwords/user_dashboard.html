@@ -288,7 +288,7 @@
                         <div class="tab-pane fade show active" id="tab-reused" role="tabpanel">
                             {% if reused_detail %}
                                 <div class="tab-detail-scroll">
-                                    {% for item in reused_detail|slice:":10" %}
+                                    {% for item in reused_detail %}
                                         <a href="{% url 'passwords:detail' item.entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
                                             <span class="d-flex align-items-center gap-2 min-w-0">
                                                 <i class="bi bi-files text-danger"></i>
@@ -305,7 +305,7 @@
                         <div class="tab-pane fade" id="tab-nototp" role="tabpanel">
                             {% if no_totp_entries %}
                                 <div class="tab-detail-scroll">
-                                    {% for entry in no_totp_entries|slice:":10" %}
+                                    {% for entry in no_totp_entries %}
                                         <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
                                             <span class="d-flex align-items-center gap-2 min-w-0">
                                                 <i class="bi bi-shield-x text-warning"></i>
@@ -322,7 +322,7 @@
                         <div class="tab-pane fade" id="tab-darkweb" role="tabpanel">
                             {% if compromised_entries %}
                                 <div class="tab-detail-scroll">
-                                    {% for entry in compromised_entries|slice:":10" %}
+                                    {% for entry in compromised_entries %}
                                         <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
                                             <span class="d-flex align-items-center gap-2 min-w-0">
                                                 <i class="bi bi-shield-shaded text-danger"></i>
@@ -339,7 +339,7 @@
                         <div class="tab-pane fade" id="tab-weak" role="tabpanel">
                             {% if weak_entries %}
                                 <div class="tab-detail-scroll">
-                                    {% for entry in weak_entries|slice:":10" %}
+                                    {% for entry in weak_entries %}
                                         <a href="{% url 'passwords:detail' entry.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none tab-detail-row">
                                             <span class="d-flex align-items-center gap-2 min-w-0">
                                                 <i class="bi bi-emoji-dizzy text-danger"></i>

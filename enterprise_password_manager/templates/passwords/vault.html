@@ -643,10 +643,12 @@
 
     const selectAll = document.getElementById('selectAll');
     if (selectAll) selectAll.addEventListener('change', function () {
+        const checked = selectAll.checked;
         document.querySelectorAll('.row-checkbox').forEach(function (cb) {
-            cb.checked = selectAll.checked;
+            cb.checked = checked;
             syncRow(cb);
         });
+        updateBulkUi();
     });
 
     const bulkClearBtn = document.getElementById('bulkClearBtn');
