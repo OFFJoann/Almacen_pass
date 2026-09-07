@@ -475,11 +475,14 @@ class Attachment(models.Model):
 def folder_tree_for_user(user):
     """Devuelve el árbol de carpetas del usuario con el conteo de registros
     de cada nodo, incluyendo las subcarpetas."""
+    from django.db.models import Count, Q as DjangoQ
     folders = list(Folder.objects.filter(user=user).select_related('parent'))
-    counts = {
-        f.id: f.entries.filter(is_deleted=False, is_obsolete=False).count()
-        for f in folders
-    }
+    count_rows = (
+        Folder.objects.filter(user=user)
+        .annotate(active=Count('entries', filter=DjangoQ(entries__is_deleted=False, entries__is_obsolete=False)))
+        .values_list('id', 'active')
+    )
+    counts = dict(count_rows)
     children_map = {}
     for f in folders:
         children_map.setdefault(f.parent_id, []).append(f)
