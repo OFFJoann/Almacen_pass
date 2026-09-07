@@ -57,6 +57,29 @@ def _collect_folder_ids(node, acc):
         _collect_folder_ids(child, acc)
 
 
+def _accessible_entries(user):
+    """Entries que el usuario puede ver: propias o compartidas (activas).
+
+    Usa Subquery/Exists en lugar de joins con DISTINCT para evitar el
+    escalamiento por la relación shares/grupos."""
+    from django.db.models import Exists, OuterRef
+    shared_user = Share.objects.filter(
+        entry_id=OuterRef('pk'), is_revoked=False,
+        shared_with_user=user,
+    )
+    shared_group = Share.objects.filter(
+        entry_id=OuterRef('pk'), is_revoked=False,
+        shared_with_group__members=user,
+    )
+    return PasswordEntry.objects.filter(
+        is_deleted=False, is_obsolete=False,
+    ).filter(
+        Q(vault__user=user) |
+        Exists(shared_user) |
+        Exists(shared_group)
+    ).select_related('vault__user', 'folder', 'category')
+
+
 def _base_vault_entries(request, vault):
     """Queryset de registros propios (no eliminados/obsoletos) aplicando los
     filtros de la bóveda (carpeta + subcarpetas, categoría, etiqueta, búsqueda,
@@ -269,16 +292,9 @@ def entry_create(request):
 
 @login_required
 def entry_edit(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
 
-    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
+    is_owner = entry.vault.user_id == request.user.pk
     if not is_owner:
         can_edit = Share.objects.filter(
             entry=entry, is_revoked=False, permission='write'
@@ -385,14 +401,7 @@ def entry_edit(request, pk):
 
 @login_required
 def entry_detail(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
 
     share = Share.objects.filter(
         entry=entry, is_revoked=False
@@ -426,7 +435,7 @@ def entry_detail(request, pk):
     strength = password_strength(raw_password)
     pct = strength_percentage(strength['entropy'])
 
-    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
+    is_owner = entry.vault.user_id == request.user.pk
 
     pending_share_requests = []
     if is_owner:
@@ -612,16 +621,9 @@ def toggle_favorite(request, pk):
 
 @login_required
 def entry_share(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
 
-    is_owner = PasswordEntry.objects.filter(pk=entry.pk, vault__user=request.user).exists()
+    is_owner = entry.vault.user_id == request.user.pk
     if not is_owner:
         can_reshare = Share.objects.filter(
             entry=entry, is_revoked=False, permission='reshare'
@@ -1494,14 +1496,7 @@ def tag_create(request):
 
 @login_required
 def totp_generate(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
     import pyotp
 
     secret = request.POST.get('secret', '').strip()
@@ -1551,14 +1546,7 @@ def totp_remove(request, pk):
 
 @login_required
 def totp_qr(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
     uri = entry.get_totp_uri()
     if not uri:
         return HttpResponse('Sin configuración 2FA', status=404)
@@ -1573,28 +1561,14 @@ def totp_qr(request, pk):
 
 @login_required
 def totp_current(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
     code = entry.get_current_totp()
     return JsonResponse({'code': code, 'has_totp': bool(code)})
 
 
 @login_required
 def entry_copy_data(request, pk):
-    entry = get_object_or_404(
-        PasswordEntry.objects.filter(is_deleted=False, is_obsolete=False).filter(
-            Q(vault__user=request.user) |
-            Q(shares__shared_with_user=request.user, shares__is_revoked=False) |
-            Q(shares__shared_with_group__members=request.user, shares__is_revoked=False)
-        ).distinct(),
-        pk=pk
-    )
+    entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
     return JsonResponse({
         'username': entry.get_username() or '',
         'password': entry.get_password() or '',
