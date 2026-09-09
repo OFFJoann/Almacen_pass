@@ -1,5 +1,6 @@
 import json
 import os
+from mangum import Mangum 
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -86,3 +87,5 @@ def list_company(empresa: str):
                 'active': entry.get('active', True),
             })
     return {'empresa': empresa, 'licenses': result}
+
+handler = Mangum(app)
