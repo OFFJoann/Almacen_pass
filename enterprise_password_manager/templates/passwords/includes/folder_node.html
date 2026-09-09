@@ -3,7 +3,7 @@
     <div class="tree-item folder-row {% if active_folder == node.folder.id|stringformat:'s' %}active{% endif %}">
       <span class="d-flex flex-grow-1 align-items-center text-decoration-none folder-name">
         {% if node.children %}
-          <i class="bi bi-chevron-down folder-toggle me-1" role="button" onclick="toggleFolder(this)" title="Desplegar / plegar"></i>
+          <i class="bi bi-chevron-right folder-toggle me-1" role="button" onclick="toggleFolder(this)" title="Desplegar / plegar"></i>
         {% else %}
           <span class="folder-toggle-placeholder me-1"></span>
         {% endif %}
@@ -19,7 +19,7 @@
       </div>
     </div>
     {% if node.children %}
-      <div class="folder-children folder-child-indent">
+      <div class="folder-children folder-child-indent collapsed">
         {% include 'passwords/includes/folder_node.html' with nodes=node.children active_folder=active_folder %}
       </div>
     {% endif %}
