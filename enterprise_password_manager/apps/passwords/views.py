@@ -2,11 +2,13 @@ import json
 import csv
 import io
 import uuid
+import secrets as _secrets
 from collections import Counter
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.http import JsonResponse, HttpResponse
@@ -14,15 +16,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count
+from django.db.models import Q, Count, F
 from apps.secrets.models import Secret
 from apps.notifications.models import Notification
 from .models import (
     PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory,
-    folder_tree_for_user, flatten_folder_tree,
+    SecureLink, folder_tree_for_user, flatten_folder_tree,
 )
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
-                     ShareForm, ShareRequestForm, ImportForm, ExportForm)
+                     ShareForm, ShareRequestForm, ImportForm, ExportForm, SecureLinkForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage
 from apps.mailer.services import domain_from_url
 
@@ -145,11 +147,6 @@ def vault_view(request):
     users_available = AppUser.objects.filter(is_active=True).exclude(pk=request.user.pk).order_by('email')
     groups_available = AppGroup.objects.all().order_by('name')
 
-    # URL que conserva los demás filtros de la bóveda pero retira solo la categoría.
-    clear_qs = request.GET.copy()
-    clear_qs.pop('category', None)
-    clear_category_url = '?' + clear_qs.urlencode() if clear_qs else ''
-
     filtered = _base_vault_entries(request, vault)
     total_entries = filtered.count()
     initial_count = 20
@@ -192,7 +189,6 @@ def vault_view(request):
         'shared_entries': shared_with_me,
         'active_folder': folder_id,
         'active_category': category_id,
-        'clear_category_url': clear_category_url,
         'active_tag': tag_id,
         'search': search,
         'active_sensitivity': sensitivity,
@@ -1417,7 +1413,24 @@ def folder_create(request):
             return redirect(redirect_to)
     else:
         form = FolderForm(user=request.user, initial=initial)
-    return render(request, 'passwords/folder_form.html', {'form': form, 'parent': parent})
+    folders = folder_tree_for_user(request.user)
+    return render(request, 'passwords/folder_form.html', {'form': form, 'parent': parent, 'folders': folders})
+
+
+@login_required
+@require_POST
+def folder_rename(request, pk):
+    folder = get_object_or_404(Folder, pk=pk, user=request.user)
+    form = FolderForm(request.POST, instance=folder, user=request.user)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'ok': True, 'name': form.cleaned_data['name']})
+    msg = ''
+    for errors in form.errors.values():
+        if errors:
+            msg = errors[0]
+            break
+    return JsonResponse({'ok': False, 'error': msg}, status=400)
 
 
 @login_required
@@ -1432,7 +1445,24 @@ def category_create(request):
             return redirect('passwords:vault')
     else:
         form = CategoryForm()
-    return render(request, 'passwords/category_form.html', {'form': form})
+    categories = Category.objects.filter(user=request.user).order_by('name')
+    return render(request, 'passwords/category_form.html', {'form': form, 'categories': categories})
+
+
+@login_required
+@require_POST
+def category_rename(request, pk):
+    category = get_object_or_404(Category, pk=pk, user=request.user)
+    form = CategoryForm(request.POST, instance=category)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'ok': True, 'name': form.cleaned_data['name']})
+    msg = ''
+    for errors in form.errors.values():
+        if errors:
+            msg = errors[0]
+            break
+    return JsonResponse({'ok': False, 'error': msg}, status=400)
 
 
 @login_required
@@ -1815,3 +1845,275 @@ def complete_onboarding(request):
         request.user.onboarding_completed = True
         request.user.save(update_fields=['onboarding_completed'])
     return JsonResponse({'ok': True})
+
+
+def _secure_link_target(kind, pk, user):
+    if kind == 'entry':
+        return get_object_or_404(
+            PasswordEntry, pk=pk, vault__user=user,
+            is_deleted=False, is_obsolete=False
+        )
+    if kind == 'secret':
+        return get_object_or_404(
+            Secret, pk=pk, user=user, is_deleted=False, is_obsolete=False
+        )
+    raise Http404
+
+
+@login_required
+def secure_link_create(request, kind, pk):
+    """Crea un enlace público temporal (estilo pwpush) para una contraseña o
+    un secreto. GET devuelve el formulario (parcial para modal), POST crea
+    el enlace y responde JSON con la URL generada."""
+    item = _secure_link_target(kind, pk, request.user)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    active_link = SecureLink.objects.filter(
+        created_by=request.user,
+        is_revoked=False,
+        expires_at__gt=timezone.now(),
+    ).filter(
+        entry=item if kind == 'entry' else None,
+        secret=item if kind == 'secret' else None,
+    ).order_by('-created_at').first()
+    if active_link:
+        existing_message = _(
+            'Este registro ya tiene un enlace temporal activo hasta el %(date)s. Debes esperar a que venza para generar otro.'
+        ) % {'date': active_link.expires_at.strftime('%d/%m/%Y %H:%M')}
+        if is_ajax and request.method == 'GET':
+            partial = render_to_string(
+                'passwords/includes/secure_link_blocked.html',
+                {'message': existing_message, 'active_link': active_link},
+                request=request,
+            )
+            return HttpResponse(partial, content_type='text/html')
+        if is_ajax and request.method == 'POST':
+            return JsonResponse({'status': 'error', 'message': existing_message})
+        messages.error(request, existing_message)
+        return redirect('passwords:secure_links_list')
+
+    if request.method == 'POST':
+        form = SecureLinkForm(request.POST)
+        if form.is_valid():
+            days = form.cleaned_data['days']
+            link = SecureLink.objects.create(
+                token=_secrets.token_urlsafe(32),
+                kind=kind,
+                entry=item if kind == 'entry' else None,
+                secret=item if kind == 'secret' else None,
+                created_by=request.user,
+                days=days,
+                expires_at=timezone.now() + timedelta(days=days),
+            )
+            from apps.audit.models import AuditLog
+            AuditLog.objects.create(
+                user=request.user,
+                action='LINK_CREATED',
+                details=f'Created public link for {item.name} ({days} days)',
+                result='success',
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+            )
+            url = request.build_absolute_uri(
+                reverse('public_link', kwargs={'token': link.token})
+            )
+            if is_ajax:
+                return JsonResponse({
+                    'status': 'ok',
+                    'url': url,
+                    'pk': str(link.pk),
+                    'days': days,
+                    'expires_at': link.expires_at.strftime('%d/%m/%Y %H:%M'),
+                })
+            messages.success(request, _('Enlace temporal creado.'))
+            return render(request, 'passwords/secure_link_created.html', {
+                'link': link, 'url': url, 'item': item,
+                'kind': kind, 'pk': pk,
+            })
+        partial = render_to_string(
+            'passwords/includes/secure_link_form_partial.html',
+            {'form': form, 'kind': kind, 'pk': pk, 'item': item},
+            request=request,
+        )
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'html': partial})
+        return render(request, 'passwords/secure_link_form.html', {
+            'form': form, 'kind': kind, 'pk': pk, 'item': item,
+        })
+
+    form = SecureLinkForm()
+    if is_ajax:
+        partial = render_to_string(
+            'passwords/includes/secure_link_form_partial.html',
+            {'form': form, 'kind': kind, 'pk': pk, 'item': item},
+            request=request,
+        )
+        return HttpResponse(partial, content_type='text/html')
+    return render(request, 'passwords/secure_link_form.html', {
+        'form': form, 'kind': kind, 'pk': pk, 'item': item,
+    })
+
+
+@login_required
+def secure_links_list(request):
+    """Módulo lateral: lista de los enlaces temporales del usuario con días
+    restantes, visitas y acciones de revocar / extender vigencia."""
+    queryset = SecureLink.objects.filter(created_by=request.user).select_related('entry', 'secret')
+    now = timezone.now()
+    links = [{
+        'link': link,
+        'days_left': link.days_left(),
+        'is_expired': link.is_expired(),
+        'is_active': link.is_active(),
+    } for link in queryset]
+    return render(request, 'passwords/secure_links.html', {
+        'links': links,
+        'now': now,
+    })
+
+
+@login_required
+@require_POST
+def secure_link_toggle_revoke(request, pk):
+    """Revoca (elimina definitivamente) un enlace temporal propio."""
+    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
+    item_name = link.title
+    link.delete()
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='LINK_REVOKED',
+        details=f'Revoked (deleted) public link {item_name}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(request, _('Enlace revocado y eliminado.'))
+    return redirect('passwords:secure_links_list')
+
+
+@login_required
+@require_POST
+def secure_link_extend(request, pk):
+    """Extiende la vigencia de un enlace temporal propio, sin superar el
+    máximo de 7 días en total desde su creación."""
+    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
+    form = SecureLinkForm(request.POST)
+    if form.is_valid():
+        days = form.cleaned_data['days']
+        base = max(link.expires_at, timezone.now())
+        cap = link.created_at + timedelta(days=7)
+        proposed = base + timedelta(days=days)
+        if proposed > cap:
+            proposed = cap
+        days_added = (proposed - max(link.expires_at, timezone.now())).days
+        link.expires_at = proposed
+        link.is_revoked = False
+        link.save(update_fields=['expires_at', 'is_revoked'])
+        from apps.audit.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user,
+            action='LINK_EXTENDED',
+            details=f'Extended public link {link.title} by {days_added} days',
+            result='success',
+            ip_address=request.META.get('REMOTE_ADDR', ''),
+        )
+        if days_added > 0:
+            messages.success(request, _('Vigencia extendida %(days)s día(s).') % {'days': days_added})
+        else:
+            messages.info(request, _('El enlace ya está en su vigencia máxima (7 días).'))
+    else:
+        messages.error(request, _('Rango de días inválido (1-7).'))
+    return redirect('passwords:secure_links_list')
+
+
+@login_required
+@require_POST
+def secure_link_send_email(request, pk):
+    """Envía por correo (SMTP) la URL de un enlace temporal propio al
+    destinatario indicado. Responde JSON para flujos AJAX."""
+    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    email = (request.POST.get('email') or '').strip()
+    if not email or '@' not in email or len(email) > 254:
+        message = _('Ingresa un correo de destino válido.')
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': message})
+        messages.error(request, message)
+        return redirect('passwords:secure_links_list')
+
+    url = request.build_absolute_uri(
+        reverse('public_link', kwargs={'token': link.token})
+    )
+    from apps.mailer.services import send_secure_link_email
+    ok, error = send_secure_link_email(email, url, link.title)
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='LINK_EMAILED',
+        details=f'Sent public link by email to {email} for {link.title}',
+        result='success' if ok else 'error',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    if ok:
+        message = _('Enlace enviado a %(email)s.') % {'email': email}
+    else:
+        message = _('No se pudo enviar el correo: %(error)s') % {'error': error}
+    if is_ajax:
+        return JsonResponse({'status': 'ok' if ok else 'error', 'message': message})
+    if ok:
+        messages.success(request, message)
+    else:
+        messages.error(request, message)
+    return redirect('passwords:secure_links_list')
+
+
+def public_link_view(request, token):
+    """Vista pública sin autenticación: muestra los datos del registro detrás
+    del enlace temporal, con botones de copia."""
+    link = get_object_or_404(SecureLink, token=token)
+    now = timezone.now()
+
+    status = 'valid'
+    if link.is_revoked:
+        status = 'revoked'
+    elif now > link.expires_at:
+        status = 'expired'
+
+    item = None
+    if status == 'valid':
+        if link.kind == 'entry':
+            item = link.entry
+            if not item or item.is_deleted or item.is_obsolete:
+                status = 'unavailable'
+        elif link.kind == 'secret':
+            item = link.secret
+            if not item or item.is_deleted or item.is_obsolete:
+                status = 'unavailable'
+
+    context = {'status': status, 'link': link}
+
+    if status == 'valid':
+        SecureLink.objects.filter(pk=link.pk).update(
+            access_count=F('access_count') + 1,
+            last_accessed_at=now,
+        )
+        context['days_left'] = link.days_left()
+        if link.kind == 'entry':
+            context.update({
+                'kind': 'entry',
+                'title': item.name,
+                'username': item.get_username(),
+                'password': item.get_password(),
+                'masked_password': '********',
+                'url': item.url,
+                'notes': item.get_notes(),
+            })
+        elif link.kind == 'secret':
+            context.update({
+                'kind': 'secret',
+                'title': item.name,
+                'secret_type': item.get_type_display(),
+                'fields': item.get_fields_display(),
+                'notes': item.get_notes(),
+            })
+
+    return render(request, 'public/public_link.html', context)

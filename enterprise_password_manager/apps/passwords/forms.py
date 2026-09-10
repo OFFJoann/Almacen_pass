@@ -69,12 +69,10 @@ class PasswordEntryForm(forms.ModelForm):
 class FolderForm(forms.ModelForm):
     class Meta:
         model = Folder
-        fields = ['name', 'parent', 'color']
+        fields = ['name', 'parent']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'parent': forms.Select(attrs={'class': 'form-control'}),
-            'icon': forms.TextInput(attrs={'class': 'form-control'}),
-            'color': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
         }
 
     def __init__(self, *args, user=None, **kwargs):
@@ -87,11 +85,9 @@ class FolderForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
-        fields = ['name', 'color']
+        fields = ['name']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'icon': forms.TextInput(attrs={'class': 'form-control'}),
-            'color': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
         }
 
 
@@ -209,4 +205,15 @@ class ExportForm(forms.Form):
     encrypt = forms.BooleanField(
         label=_('Cifrar exportación'), required=False, initial=True,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+
+class SecureLinkForm(forms.Form):
+    days = forms.IntegerField(
+        label=_('Días de vigencia'),
+        min_value=1,
+        max_value=7,
+        initial=3,
+        help_text=_('Máximo 7 días. Al expirar, el enlace dejará de funcionar.'),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 7})
     )

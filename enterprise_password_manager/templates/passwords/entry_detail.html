@@ -30,6 +30,11 @@
                                 <i class="bi bi-share"></i> {% if user_share and user_share.permission == 'reshare' %}Solicitar compartir{% else %}Compartir{% endif %}
                             </a>
                         {% endif %}
+                        {% if is_owner %}
+                            <button type="button" class="btn btn-outline-warning btn-sm" title="Crear enlace temporal (pwpush)" onclick="openSecureLinkModal('entry', '{{ entry.pk }}')">
+                                <i class="bi bi-link-45deg"></i> Enlace
+                            </button>
+                        {% endif %}
                         {% if not user_share %}
                             <form method="post" id="obsolete-entry-{{ entry.pk }}" action="{% url 'passwords:entry_mark_obsolete' entry.pk %}" class="d-inline">
                                 {% csrf_token %}
@@ -204,6 +209,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include 'passwords/includes/secure_link_modal.html' %}
 <script src="{% static 'vendor/jsqr/jsQR.js' %}"></script>
 <script>
     function togglePasswordVisibility() {
