@@ -3,9 +3,16 @@
     <td class="text-center align-middle">
         <input type="checkbox" class="form-check-input m-0 row-checkbox" value="{{ entry.pk }}" aria-label="Seleccionar {{ entry.name }}">
     </td>
+    <td class="text-center align-middle">
+        <button type="button" class="btn btn-sm btn-link p-0 border-0 favorite-btn {% if entry.is_favorite %}text-warning{% else %}text-muted{% endif %}"
+                onclick="toggleFavorite(this, '{{ entry.pk }}')"
+                title="{% if entry.is_favorite %}Quitar de favoritas{% else %}Marcar como favorita{% endif %}"
+                aria-label="Favorito">
+            <i class="bi {% if entry.is_favorite %}bi-star-fill{% else %}bi-star{% endif %}"></i>
+        </button>
+    </td>
     <td>
         <a href="{% url 'passwords:detail' entry.pk %}" class="text-decoration-none fw-medium">
-            {% if entry.is_favorite %}<i class="bi bi-star-fill text-warning"></i>{% endif %}
             <i class="bi bi-key"></i> {{ entry.name }}
             {% if entry.is_compromised %}<span class="badge bg-danger ms-1" title="Expuesta en filtraciones">DarkWeb</span>{% endif %}
         </a>
@@ -33,6 +40,7 @@
         <div class="d-inline-flex align-items-center gap-1">
             <div class="btn-group btn-group-sm">
                 <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
+                <button type="button" class="btn btn-outline-warning" title="Enlace temporal" onclick="openSecureLinkModal('entry', '{{ entry.pk }}')"><i class="bi bi-link-45deg"></i></button>
                 <button type="button" class="btn btn-outline-info" title="Compartir" onclick="openShareModal('{{ entry.pk }}', '{{ entry.name|escapejs }}')"><i class="bi bi-share"></i></button>
                  <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}', '{{ entry.folder.id|default:'' }}')"><i class="bi bi-folder-symlink"></i></button>
                 <button type="button" class="btn btn-outline-secondary" title="Editar" onclick="openEditModal('{{ entry.pk }}')"><i class="bi bi-pencil"></i></button>

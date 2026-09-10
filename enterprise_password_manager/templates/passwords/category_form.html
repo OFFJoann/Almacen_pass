@@ -6,9 +6,97 @@
         <div class="card shadow-sm">
             <div class="card-body p-4">
                 <h4 class="mb-4"><i class="bi bi-tag"></i> Crear Categoría</h4>
-                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}</div>{% endfor %}<button type="submit" class="btn btn-primary">Crear</button></form>
+                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button type="submit" class="btn btn-primary">Crear</button></form>
             </div>
         </div>
+        {% if categories %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-body p-4">
+                <h5 class="mb-3"><i class="bi bi-list-ul"></i> Mis Categorías</h5>
+                <ul class="list-group">
+                    {% for cat in categories %}
+                    <li class="list-group-item d-flex align-items-center gap-2 flex-wrap" data-category-row>
+                        <i class="bi bi-tag text-muted"></i>
+                        <span class="flex-grow-1" data-category-name>{{ cat.name }}</span>
+                        <a href="{% url 'passwords:category_delete' cat.id %}" class="btn btn-sm btn-outline-danger" title="Eliminar categoría"><i class="bi bi-trash"></i></a>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cambiar nombre" onclick="renameInline(this, 'category')"><i class="bi bi-pencil"></i> Renombrar</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    function renameInline(btn, kind) {
+        const row = btn.closest('[data-' + kind + '-row]');
+        const label = row.querySelector('[data-' + kind + '-name]');
+        const current = label.textContent.trim();
+        const err = document.createElement('div');
+        err.className = 'text-danger small';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control';
+        input.value = current;
+        const save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'btn btn-sm btn-primary';
+        save.innerHTML = '<i class="bi bi-check-lg"></i>';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-sm btn-outline-secondary';
+        cancel.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+        const form = document.createElement('div');
+        form.className = 'd-flex gap-2 flex-grow-1';
+        form.appendChild(input);
+        form.appendChild(save);
+        form.appendChild(cancel);
+
+        label.replaceWith(form);
+        btn.disabled = true;
+        input.focus();
+
+        function restore() {
+            form.replaceWith(label);
+            btn.disabled = false;
+            if (err.parentNode) err.remove();
+        }
+        cancel.addEventListener('click', restore);
+        save.addEventListener('click', function () { submitRename(form, btn, label, kind, input, err); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); submitRename(form, btn, label, kind, input, err); }
+            if (e.key === 'Escape') restore();
+        });
+    }
+
+    function submitRename(form, btn, label, kind, input, err) {
+        const pk = btn.closest('[data-' + kind + '-row]').querySelector('a[title^="Eliminar"]').getAttribute('href').split('/').filter(Boolean).pop();
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        if (err.parentNode) err.remove();
+        fetch("{% url 'passwords:category_rename' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', pk), {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'name=' + encodeURIComponent(input.value)
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (res.ok) {
+                    label.textContent = res.d.name;
+                    form.replaceWith(label);
+                    btn.disabled = false;
+                } else {
+                    err.textContent = res.d.error || 'No se pudo renombrar';
+                    form.after(err);
+                }
+            })
+            .catch(function () {
+                err.textContent = 'Error de red';
+                form.after(err);
+            });
+    }
+</script>
 {% endblock %}

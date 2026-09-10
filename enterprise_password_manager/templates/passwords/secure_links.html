@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Enlaces temporales{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-link-45deg"></i> Enlaces temporales</h6>
+        <small class="text-muted">Vigencia máxima de 7 días por enlace</small>
+    </div>
+    <div class="card-body">
+        {% if links %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Registro</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th>Vigencia</th>
+                            <th>Visitas</th>
+                            <th>Creado</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in links %}
+                        {% with link=item.link %}
+                        <tr>
+                            <td>
+                                <strong>{{ link.title }}</strong>
+                                {% if link.kind == 'entry' and link.entry.is_compromised %}
+                                    <span class="badge bg-danger ms-1">DarkWeb</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if link.kind == 'entry' %}
+                                    <span class="badge bg-primary">Contraseña</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Secreto</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if link.is_revoked %}
+                                    <span class="badge bg-danger">Revocado</span>
+                                {% elif item.is_expired %}
+                                    <span class="badge bg-secondary">Expirado</span>
+                                {% else %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if link.is_revoked %}
+                                    <span class="text-muted">-</span>
+                                {% elif item.is_expired %}
+                                    <span class="text-danger">Vencido el {{ link.expires_at|date:'d/m/Y H:i' }}</span>
+                                {% else %}
+                                    <span class="text-success">{{ item.days_left }} día{{ item.days_left|pluralize:'s' }}</span>
+                                    <small class="text-muted d-block">hasta {{ link.expires_at|date:'d/m/Y H:i' }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ link.access_count }}</td>
+                            <td>{{ link.created_at|date:'d/m/Y H:i' }}</td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-1">
+                                    {% if item.is_active %}
+                                        <form method="post" action="{% url 'passwords:secure_link_extend' link.pk %}" class="d-inline-flex align-items-center gap-1" onsubmit="return confirm('¿Extender la vigencia?')">
+                                            {% csrf_token %}
+                                            <input type="number" name="days" min="1" max="7" value="3" class="form-control form-control-sm" style="width: 65px;" title="Días adicionales (1-7)">
+                                            <button class="btn btn-sm btn-outline-success" title="Extender vigencia"><i class="bi bi-plus-lg"></i></button>
+                                        </form>
+                                        <button class="btn btn-sm btn-outline-secondary" title="Copiar enlace"
+                                                data-link-url="{% url 'public_link' link.token %}">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                        <form method="post" action="{% url 'passwords:secure_link_revoke' link.pk %}" class="d-inline" id="revokeForm-{{ link.pk }}">
+                                            {% csrf_token %}
+                                            <button type="button" class="btn btn-sm btn-outline-danger" title="Revocar" onclick="confirmRevokeLink('{{ link.pk }}', '{{ link.title|escapejs }}')"><i class="bi bi-x-lg"></i></button>
+                                        </form>
+                                    {% elif link.is_expired and not link.is_revoked %}
+                                        <form method="post" action="{% url 'passwords:secure_link_extend' link.pk %}" class="d-inline-flex align-items-center gap-1" onsubmit="return confirm('¿Extender la vigencia? El enlace se reactivará.')">
+                                            {% csrf_token %}
+                                            <input type="number" name="days" min="1" max="7" value="7" class="form-control form-control-sm" style="width: 65px;" title="Días adicionales (1-7)">
+                                            <button class="btn btn-sm btn-outline-success" title="Extender y reactivar"><i class="bi bi-plus-lg"></i></button>
+                                        </form>
+                                    {% else %}
+                                        <span class="text-muted small">No hay acciones</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-link-45deg text-muted" style="font-size: 2.5rem;"></i>
+                <p class="text-muted mt-2 mb-1">No has creado enlaces temporales.</p>
+                <small class="text-muted">Genera un enlace desde un registro de Mi Bóveda o desde un Secreto.</small>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal fade" id="revokeLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-x-lg text-danger"></i> Revocar enlace</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Seguro que deseas revocar <strong id="revokeLinkTitle"></strong>?</p>
+                <p class="text-muted small mb-0">El enlace <strong>se eliminará definitivamente</strong> y dejará de ser accesible de inmediato. Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-danger" id="confirmRevokeLinkBtn">Revocar y eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _revokeLinkModal = null;
+var _revokeLinkForm = null;
+
+function confirmRevokeLink(pk, title) {
+    document.getElementById('revokeLinkTitle').textContent = title ? '«' + title + '»' : 'el enlace';
+    _revokeLinkForm = document.getElementById('revokeForm-' + pk);
+    if (!_revokeLinkForm) return;
+    _revokeLinkModal = new bootstrap.Modal(document.getElementById('revokeLinkModal'));
+    _revokeLinkModal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var confirmBtn = document.getElementById('confirmRevokeLinkBtn');
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+            if (_revokeLinkForm) {
+                _revokeLinkForm.submit();
+            }
+        });
+    }
+});
+document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('[data-link-url]') : null;
+        if (!btn) return;
+        var absolute = window.location.origin + btn.getAttribute('data-link-url');
+        copyToClipboard(absolute).then(function () {
+            var original = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            var self = btn;
+            setTimeout(function () { self.innerHTML = original; }, 2000);
+        }).catch(function () { showToast('No se pudo copiar el enlace', 'danger'); });
+    });
+});
+</script>
+{% endblock %}

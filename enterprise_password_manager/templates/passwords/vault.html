@@ -150,42 +150,13 @@
                 </div>
             </div>
         </div>
-        <div class="card shadow-sm mt-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="card-title mb-0"><i class="bi bi-tag"></i> Categorías</h6>
-                    {% if active_category %}
-                        <a href="{% url 'passwords:vault' %}{{ clear_category_url }}" class="btn btn-sm btn-outline-secondary" title="Retirar filtro de categoría">
-                            <i class="bi bi-x-lg"></i> Retirar filtro
-                        </a>
-                    {% endif %}
-                </div>
-                <div class="input-group input-group-sm mb-2">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control organizer-search" id="categorySearch" placeholder="Buscar categorías...">
-                </div>
-                <div class="organizer-scroll" id="vaultCategories">
-                    <div class="tree-item tree-root d-flex justify-content-between align-items-center {% if not active_category %}active{% endif %}">
-                        <a href="{% url 'passwords:vault' %}{{ clear_category_url }}" class="text-decoration-none flex-grow-1 tree-name">Todas</a>
-                    </div>
-                    {% for cat in categories %}
-                        <div class="tree-item {% if active_category == cat.id|stringformat:'s' %}active{% endif %}">
-                            <a href="{% url 'passwords:vault' %}?category={{ cat.id }}" class="text-decoration-none flex-grow-1 d-flex align-items-center gap-1 tree-name">
-                                <i class="bi bi-tag"></i> {{ cat.name }}
-                            </a>
-                            <a href="{% url 'passwords:category_delete' cat.id %}" class="text-danger" title="Eliminar categoría"><i class="bi bi-trash"></i></a>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="col-md-9">
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="row mb-3">
-                    <div class="col-md-8">
+                    <div class="col-md-12">
                         <form method="get" class="d-flex gap-2">
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -197,13 +168,29 @@
                             {% endif %}
                         </form>
                     </div>
+                </div>
+                <div class="row mb-3 g-2">
                     <div class="col-md-4">
-                        <select class="form-select" data-tour="sensitivity" onchange="if(this.value) window.location.href='{% url 'passwords:vault' %}?sensitivity='+this.value">
+                        <select class="form-select" onchange="vaultFilter('category', this.value)">
+                            <option value="">Todas las Categorías</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}" {% if active_category == cat.id|stringformat:'s' %}selected{% endif %}>{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" data-tour="sensitivity" onchange="vaultFilter('sensitivity', this.value)">
                             <option value="">Todas las Sensibilidades</option>
                             <option value="low" {% if active_sensitivity == 'low' %}selected{% endif %}>Baja</option>
                             <option value="medium" {% if active_sensitivity == 'medium' %}selected{% endif %}>Media</option>
                             <option value="high" {% if active_sensitivity == 'high' %}selected{% endif %}>Alta</option>
                             <option value="critical" {% if active_sensitivity == 'critical' %}selected{% endif %}>Crítica</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" onchange="vaultFilter('favorite', this.value)">
+                            <option value="">Todas</option>
+                            <option value="1" {% if favorite_filter %}selected{% endif %}>Solo Favoritas</option>
                         </select>
                     </div>
                 </div>
@@ -216,7 +203,6 @@
                         <button type="button" class="btn btn-sm btn-outline-warning" id="bulkMoveBtn" title="Mover a una carpeta"><i class="bi bi-folder-symlink"></i> Mover</button>
                         <button type="button" class="btn btn-sm btn-outline-info" id="bulkShareBtn" title="Compartir"><i class="bi bi-share"></i> Compartir</button>
                         <button type="button" class="btn btn-sm btn-outline-danger" id="bulkDeleteBtn" title="Mover a la papelera"><i class="bi bi-trash"></i> Eliminar</button>
-                        <button type="button" class="btn btn-sm btn-link ms-auto" id="bulkClearBtn"><i class="bi bi-x-lg"></i> Limpiar</button>
                     </div>
                     <div class="table-responsive vault-scroll" data-tour="entry-actions">
                         <table class="table table-hover">
@@ -225,6 +211,7 @@
                                     <th class="text-center" style="width:2rem">
                                         <input type="checkbox" class="form-check-input m-0" id="selectAll" aria-label="Seleccionar todos">
                                     </th>
+                                    <th class="text-center" style="width:2rem" title="Favorito">Fav</th>
                                     <th>Nombre</th>
                                     <th>Usuario</th>
                                     <th>Carpeta</th>
@@ -413,6 +400,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include 'passwords/includes/secure_link_modal.html' %}
 <script>
     // ---------- Carga progresiva de registros (Mi Bóveda) ----------
     (function () {
@@ -506,26 +494,6 @@
         });
     })();
 
-    // ---------- Búsqueda de categorías (filtro en cliente) ----------
-    (function () {
-        const input = document.getElementById('categorySearch');
-        if (!input) return;
-        input.addEventListener('input', function () {
-            const q = input.value.trim().toLowerCase();
-            var any = false;
-            document.querySelectorAll('#vaultCategories .tree-item').forEach(function (item) {
-                if (item.classList.contains('tree-root')) return;
-                var name = item.querySelector('.tree-name');
-                var text = name ? name.textContent.trim().toLowerCase() : '';
-                var match = !q || text.indexOf(q) !== -1;
-                item.classList.toggle('tree-hidden', !match);
-                if (match) any = true;
-            });
-            var root = document.querySelector('#vaultCategories .tree-root');
-            if (root) root.classList.toggle('tree-hidden', q && !('Todas'.toLowerCase().indexOf(q) !== -1));
-        });
-    })();
-
     async function copyEntryData(pk, field) {
         try {
             const res = await fetch('/vault/entry/' + pk + '/copy-data/');
@@ -597,6 +565,7 @@
     // ---------- Selección múltiple y acciones en lote ----------
     let bulkMode = false;
     const selected = {}; // pk -> true
+    let selectedCount = 0;
 
     window.selectedIds = function () {
         const keys = Object.keys(selected).filter(function (k) { return selected[k]; });
@@ -606,9 +575,8 @@
     function updateBulkUi() {
         const toolbar = document.getElementById('bulkToolbar');
         if (!toolbar) return;
-        const count = window.selectedIds().length;
-        document.getElementById('bulkCount').textContent = count;
-        if (count > 0) {
+        document.getElementById('bulkCount').textContent = selectedCount;
+        if (selectedCount > 0) {
             bulkMode = true;
             toolbar.classList.remove('d-none');
             toolbar.classList.add('d-flex');
@@ -618,16 +586,21 @@
             toolbar.classList.remove('d-flex');
         }
         const all = document.getElementById('selectAll');
-        if (all) all.checked = count > 0 && count === document.querySelectorAll('.row-checkbox').length;
+        if (all) all.checked = selectedCount > 0 && selectedCount === document.querySelectorAll('.row-checkbox').length;
     }
 
     function syncRow(cb) {
         const row = cb.closest('tr');
         if (!row) return;
         if (cb.checked) {
+            if (!selected[cb.value]) selectedCount += 1;
             selected[cb.value] = true;
             row.classList.add('selected');
         } else {
+            if (selected[cb.value]) {
+                selectedCount -= 1;
+                if (selectedCount < 0) selectedCount = 0;
+            }
             delete selected[cb.value];
             row.classList.remove('selected');
         }
@@ -644,19 +617,21 @@
     const selectAll = document.getElementById('selectAll');
     if (selectAll) selectAll.addEventListener('change', function () {
         const checked = selectAll.checked;
-        document.querySelectorAll('.row-checkbox').forEach(function (cb) {
+        const cbs = document.querySelectorAll('.row-checkbox');
+        selectedCount = 0;
+        for (let i = 0; i < cbs.length; i++) {
+            const cb = cbs[i];
             cb.checked = checked;
-            syncRow(cb);
-        });
+            if (checked) {
+                selected[cb.value] = true;
+                selectedCount += 1;
+            } else {
+                delete selected[cb.value];
+            }
+            const row = cb.closest('tr');
+            if (row) row.classList.toggle('selected', checked);
+        }
         updateBulkUi();
-    });
-
-    const bulkClearBtn = document.getElementById('bulkClearBtn');
-    if (bulkClearBtn) bulkClearBtn.addEventListener('click', function () {
-        document.querySelectorAll('.row-checkbox').forEach(function (cb) {
-            cb.checked = false;
-            syncRow(cb);
-        });
     });
 
     const bulkMoveBtn = document.getElementById('bulkMoveBtn');
@@ -791,6 +766,46 @@
     }
     function openShareModal(pk, name) {
         loadModalForm('shareEntryModal', 'shareEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/share/');
+    }
+
+    // ---------- Filtros combinables (URL) ----------
+    function vaultFilter(name, value) {
+        const params = new URLSearchParams(window.location.search);
+        if (value) { params.set(name, value); } else { params.delete(name); }
+        const qs = params.toString();
+        window.location.href = qs ? '?' + qs : "{% url 'passwords:vault' %}";
+    }
+
+    // ---------- Favoritos ----------
+    function toggleFavorite(btn, pk) {
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const url = "{% url 'passwords:vault' %}" + 'entry/' + pk + '/favorite/';
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf }
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                const on = !!data.is_favorite;
+                const icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = on ? 'bi bi-star-fill' : 'bi bi-star';
+                    btn.classList.toggle('text-warning', on);
+                    btn.classList.toggle('text-muted', !on);
+                    btn.title = on ? 'Quitar de favoritas' : 'Marcar como favorita';
+                }
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('favorite') === '1' && !on) {
+                    params.delete('favorite');
+                    const qs = params.toString();
+                    window.location.replace(window.location.pathname + (qs ? '?' + qs : ''));
+                    return;
+                }
+                const count = document.querySelector('.fav-count');
+                if (count && on) count.textContent = parseInt(count.textContent || '0', 10) + 1;
+                if (count && !on) count.textContent = Math.max(0, parseInt(count.textContent || '0', 10) - 1);
+            })
+            .catch(function () { showToast('No se pudo actualizar el favorito', 'danger'); });
     }
 
     {% if show_onboarding %}

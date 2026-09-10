@@ -20,6 +20,7 @@ PUBLIC_PREFIXES = (
     '/__debug__/',
     '/static/',
     '/media/',
+    '/link/',
 )
 
 

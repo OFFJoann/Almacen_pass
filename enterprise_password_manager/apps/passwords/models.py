@@ -472,6 +472,71 @@ class Attachment(models.Model):
         return self.filename
 
 
+class SecureLink(models.Model):
+    """Enlace público temporal (estilo pwpush) para compartir a usuarios
+    externos una contraseña o un secreto de forma puntual. El acceso es por
+    token (sin autenticación), con vigencia máxima de días y revocable."""
+
+    KIND_PASSWORD = 'entry'
+    KIND_SECRET = 'secret'
+    KIND_CHOICES = [
+        (KIND_PASSWORD, _('Contraseña')),
+        (KIND_SECRET, _('Secreto')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    token = models.CharField(_('token'), max_length=64, unique=True, db_index=True)
+    kind = models.CharField(_('tipo'), max_length=10, choices=KIND_CHOICES)
+    entry = models.ForeignKey(
+        PasswordEntry, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='secure_links'
+    )
+    secret = models.ForeignKey(
+        'secrets.Secret', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='secure_links'
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='secure_links'
+    )
+    created_at = models.DateTimeField(_('creado el'), default=timezone.now)
+    expires_at = models.DateTimeField(_('expira el'))
+    days = models.PositiveSmallIntegerField(_('días de vigencia'), default=3)
+    is_revoked = models.BooleanField(_('revocado'), default=False)
+    access_count = models.PositiveIntegerField(_('visitas'), default=0)
+    last_accessed_at = models.DateTimeField(_('último acceso'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('enlace temporal')
+        verbose_name_plural = _('enlaces temporales')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def title(self):
+        if self.entry:
+            return self.entry.name
+        if self.secret:
+            return self.secret.name
+        return '—'
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def is_active(self):
+        return not self.is_revoked and not self.is_expired()
+
+    def days_left(self):
+        import math
+        diff = self.expires_at - timezone.now()
+        total = diff.total_seconds()
+        if total <= 0:
+            return 0
+        return math.ceil(total / 86400)
+
+
 def folder_tree_for_user(user):
     """Devuelve el árbol de carpetas del usuario con el conteo de registros
     de cada nodo, incluyendo las subcarpetas."""

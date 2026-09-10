@@ -8,9 +8,104 @@
                 <h4 class="mb-4"><i class="bi bi-folder-plus"></i> Crear Carpeta
                     {% if parent %}<small class="text-muted">en «{{ parent.name }}»</small>{% endif %}
                 </h4>
-                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}</div>{% endfor %}<div class="d-flex gap-2"><button type="submit" class="btn btn-primary">Crear</button><a href="{% url 'passwords:vault' %}{% if parent %}?folder={{ parent.id }}{% endif %}" class="btn btn-outline-secondary">Cancelar</a></div></form>
+                <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<div class="d-flex gap-2"><button type="submit" class="btn btn-primary">Crear</button><a href="{% url 'passwords:vault' %}{% if parent %}?folder={{ parent.id }}{% endif %}" class="btn btn-outline-secondary">Cancelar</a></div></form>
             </div>
         </div>
+        {% if folders %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-body p-4">
+                <h5 class="mb-3"><i class="bi bi-list-ul"></i> Mis Carpetas</h5>
+                <ul class="list-group">
+                    {% include 'passwords/includes/folder_list_node.html' with nodes=folders %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    function toggleFolderNode(toggle) {
+        const li = toggle.closest('li');
+        const children = li.querySelector(':scope > .folder-children');
+        if (!children) return;
+        const icon = toggle.querySelector('i');
+        if (children.style.display === 'none') {
+            children.style.display = '';
+            if (icon) { icon.className = 'bi bi-chevron-down'; }
+        } else {
+            children.style.display = 'none';
+            if (icon) { icon.className = 'bi bi-chevron-right'; }
+        }
+    }
+
+    function renameInline(btn) {
+        const row = btn.closest('[data-folder-row]');
+        const label = row.querySelector('[data-folder-name]');
+        const current = label.textContent.trim();
+        const err = document.createElement('div');
+        err.className = 'text-danger small';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control';
+        input.value = current;
+        const save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'btn btn-sm btn-primary';
+        save.innerHTML = '<i class="bi bi-check-lg"></i>';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-sm btn-outline-secondary';
+        cancel.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+        const form = document.createElement('div');
+        form.className = 'd-flex gap-2 flex-grow-1';
+        form.appendChild(input);
+        form.appendChild(save);
+        form.appendChild(cancel);
+
+        label.replaceWith(form);
+        btn.disabled = true;
+        input.focus();
+
+        function restore() {
+            form.replaceWith(label);
+            btn.disabled = false;
+            if (err.parentNode) err.remove();
+        }
+        cancel.addEventListener('click', restore);
+        save.addEventListener('click', function () { submitRename(row, form, btn, label, input, err); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); submitRename(row, form, btn, label, input, err); }
+            if (e.key === 'Escape') restore();
+        });
+    }
+
+    function submitRename(row, form, btn, label, input, err) {
+        const pk = row.querySelector('a[title="Eliminar"]').getAttribute('href').split('/').filter(Boolean).pop();
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        if (err.parentNode) err.remove();
+        fetch("{% url 'passwords:folder_rename' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', pk), {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'name=' + encodeURIComponent(input.value)
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (res.ok) {
+                    label.textContent = res.d.name;
+                    form.replaceWith(label);
+                    btn.disabled = false;
+                } else {
+                    err.textContent = res.d.error || 'No se pudo renombrar';
+                    form.after(err);
+                }
+            })
+            .catch(function () {
+                err.textContent = 'Error de red';
+                form.after(err);
+            });
+    }
+</script>
 {% endblock %}
