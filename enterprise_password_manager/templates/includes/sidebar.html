@@ -33,12 +33,6 @@
             </a>
         </li>
         <li class="nav-item">
-            <a href="{% url 'passwords:secure_links_list' %}" class="nav-link {% if request.resolver_match.url_name == 'secure_links_list' %}active{% endif %}">
-                <i class="bi bi-link-45deg"></i>
-                <span class="sidebar-text">Enlaces temporales</span>
-            </a>
-        </li>
-        <li class="nav-item">
             <a href="{% url 'passwords:trash' %}" class="nav-link {% if request.resolver_match.namespace == 'passwords' and request.resolver_match.url_name == 'trash' %}active{% endif %}" data-tour="trash">
                 <i class="bi bi-trash-fill"></i>
                 <span class="sidebar-text">Papelera</span>

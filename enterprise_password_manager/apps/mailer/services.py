@@ -298,26 +298,6 @@ def send_test_email(to, context=None):
     return ok, error
 
 
-def send_secure_link_email(to_email, link_url, item_name='', context=None):
-    """Envía un correo con un enlace temporal (pwpush) al destinatario indicado.
-
-    Usa el evento 'link_shared' y el SMTP configurado. Devuelve (ok, error).
-    """
-    from .models import NotificationEvent
-    try:
-        event = NotificationEvent.objects.get(code='link_shared', is_active=True)
-    except NotificationEvent.DoesNotExist:
-        return False, _('Evento de enlace temporal no configurado')
-    ctx = base_context()
-    ctx['usuario'] = to_email
-    ctx['nombre_servicio'] = item_name or _('un registro')
-    ctx['dominio'] = domain_from_url(link_url)
-    ctx['url'] = link_url
-    ctx.update(context or {})
-    subject, body_html, body_text = render_event_email(event, ctx)
-    return send_email(to_email, subject, body_html, body_text, event=event, status='sent')
-
-
 def send_event_test(event_code, to_email, context=None):
     """Enviar una prueba de una plantilla de evento concreta a un correo indicado."""
     from .models import NotificationEvent

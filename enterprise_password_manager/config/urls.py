@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.views.generic import RedirectView
-from apps.passwords.views import public_link_view
+from apps.passwords.views import shared_password_view
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='passwords:vault', permanent=False), name='home'),
@@ -12,7 +12,7 @@ urlpatterns = [
     path('auth/', include(('apps.authentication.urls', 'authentication'), namespace='authentication')),
     path('users/', include(('apps.users.urls', 'users'), namespace='users')),
     path('vault/', include(('apps.passwords.urls', 'passwords'), namespace='passwords')),
-    path('link/<str:token>/', public_link_view, name='public_link'),
+    path('link/<str:token>/', shared_password_view, name='public_link'),
     path('audit/', include(('apps.audit.urls', 'audit'), namespace='audit')),
     path('notifications/', include(('apps.notifications.urls', 'notifications'), namespace='notifications')),
     path('sso/', include(('apps.sso.urls', 'sso'), namespace='sso')),

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import csv
 import io
 import uuid
@@ -21,10 +21,10 @@ from apps.secrets.models import Secret
 from apps.notifications.models import Notification
 from .models import (
     PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory,
-    SecureLink, folder_tree_for_user, flatten_folder_tree,
+    SharedPassword, folder_tree_for_user, flatten_folder_tree,
 )
 from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
-                     ShareForm, ShareRequestForm, ImportForm, ExportForm, SecureLinkForm)
+                     ShareForm, ShareRequestForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage
 from apps.mailer.services import domain_from_url
 
@@ -894,11 +894,21 @@ def share_request_approve(request, request_id):
     share_request.save(update_fields=['status', 'responded_by', 'responded_at'])
 
     duration = _('ilimitada') if not share_request.requested_days else f'{share_request.requested_days} día(s)'
+    sharer_name = request.user.full_name or request.user.email
     Notification.objects.create(
         user=share_request.requested_by,
         title=_('Re-compartición aprobada'),
         message=_('Tu solicitud para compartir «%(entry)s» con %(target)s (duración: %(duration)s) fue aprobada.')
                  % {'entry': entry.name, 'target': target.email, 'duration': duration},
+        notification_type='success',
+        action_url=reverse('passwords:detail', kwargs={'pk': entry.pk}),
+    )
+
+    Notification.objects.create(
+        user=target,
+        title=_('Contraseña compartida'),
+        message=_('%(sharer)s te compartió la contraseña «%(entry)s» (duración: %(duration)s).')
+                 % {'sharer': sharer_name, 'entry': entry.name, 'duration': duration},
         notification_type='success',
         action_url=reverse('passwords:detail', kwargs={'pk': entry.pk}),
     )
@@ -917,6 +927,12 @@ def share_request_approve(request, request_id):
         'nombre_servicio': entry.name,
         'compartido_con': target.email,
     }, recipients=[share_request.requested_by.email])
+    notify_event_task.delay('password_shared', {
+        'compartido_por': request.user.email,
+        'compartido_con': target.email,
+        'nombre_servicio': entry.name,
+        'url': entry.url or '/',
+    }, recipients=[target.email])
 
     messages.success(request, _('Solicitud aprobada y contraseña compartida.'))
     return redirect('passwords:share_requests')
@@ -1847,273 +1863,75 @@ def complete_onboarding(request):
     return JsonResponse({'ok': True})
 
 
-def _secure_link_target(kind, pk, user):
-    if kind == 'entry':
-        return get_object_or_404(
-            PasswordEntry, pk=pk, vault__user=user,
-            is_deleted=False, is_obsolete=False
-        )
-    if kind == 'secret':
-        return get_object_or_404(
-            Secret, pk=pk, user=user, is_deleted=False, is_obsolete=False
-        )
-    raise Http404
-
-
-@login_required
-def secure_link_create(request, kind, pk):
-    """Crea un enlace público temporal (estilo pwpush) para una contraseña o
-    un secreto. GET devuelve el formulario (parcial para modal), POST crea
-    el enlace y responde JSON con la URL generada."""
-    item = _secure_link_target(kind, pk, request.user)
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-
-    active_link = SecureLink.objects.filter(
-        created_by=request.user,
-        is_revoked=False,
-        expires_at__gt=timezone.now(),
-    ).filter(
-        entry=item if kind == 'entry' else None,
-        secret=item if kind == 'secret' else None,
-    ).order_by('-created_at').first()
-    if active_link:
-        existing_message = _(
-            'Este registro ya tiene un enlace temporal activo hasta el %(date)s. Debes esperar a que venza para generar otro.'
-        ) % {'date': active_link.expires_at.strftime('%d/%m/%Y %H:%M')}
-        if is_ajax and request.method == 'GET':
-            partial = render_to_string(
-                'passwords/includes/secure_link_blocked.html',
-                {'message': existing_message, 'active_link': active_link},
-                request=request,
-            )
-            return HttpResponse(partial, content_type='text/html')
-        if is_ajax and request.method == 'POST':
-            return JsonResponse({'status': 'error', 'message': existing_message})
-        messages.error(request, existing_message)
-        return redirect('passwords:secure_links_list')
-
-    if request.method == 'POST':
-        form = SecureLinkForm(request.POST)
-        if form.is_valid():
-            days = form.cleaned_data['days']
-            link = SecureLink.objects.create(
-                token=_secrets.token_urlsafe(32),
-                kind=kind,
-                entry=item if kind == 'entry' else None,
-                secret=item if kind == 'secret' else None,
-                created_by=request.user,
-                days=days,
-                expires_at=timezone.now() + timedelta(days=days),
-            )
-            from apps.audit.models import AuditLog
-            AuditLog.objects.create(
-                user=request.user,
-                action='LINK_CREATED',
-                details=f'Created public link for {item.name} ({days} days)',
-                result='success',
-                ip_address=request.META.get('REMOTE_ADDR', ''),
-            )
-            url = request.build_absolute_uri(
-                reverse('public_link', kwargs={'token': link.token})
-            )
-            if is_ajax:
-                return JsonResponse({
-                    'status': 'ok',
-                    'url': url,
-                    'pk': str(link.pk),
-                    'days': days,
-                    'expires_at': link.expires_at.strftime('%d/%m/%Y %H:%M'),
-                })
-            messages.success(request, _('Enlace temporal creado.'))
-            return render(request, 'passwords/secure_link_created.html', {
-                'link': link, 'url': url, 'item': item,
-                'kind': kind, 'pk': pk,
-            })
-        partial = render_to_string(
-            'passwords/includes/secure_link_form_partial.html',
-            {'form': form, 'kind': kind, 'pk': pk, 'item': item},
-            request=request,
-        )
-        if is_ajax:
-            return JsonResponse({'status': 'error', 'html': partial})
-        return render(request, 'passwords/secure_link_form.html', {
-            'form': form, 'kind': kind, 'pk': pk, 'item': item,
-        })
-
-    form = SecureLinkForm()
-    if is_ajax:
-        partial = render_to_string(
-            'passwords/includes/secure_link_form_partial.html',
-            {'form': form, 'kind': kind, 'pk': pk, 'item': item},
-            request=request,
-        )
-        return HttpResponse(partial, content_type='text/html')
-    return render(request, 'passwords/secure_link_form.html', {
-        'form': form, 'kind': kind, 'pk': pk, 'item': item,
-    })
-
-
-@login_required
-def secure_links_list(request):
-    """Módulo lateral: lista de los enlaces temporales del usuario con días
-    restantes, visitas y acciones de revocar / extender vigencia."""
-    queryset = SecureLink.objects.filter(created_by=request.user).select_related('entry', 'secret')
-    now = timezone.now()
-    links = [{
-        'link': link,
-        'days_left': link.days_left(),
-        'is_expired': link.is_expired(),
-        'is_active': link.is_active(),
-    } for link in queryset]
-    return render(request, 'passwords/secure_links.html', {
-        'links': links,
-        'now': now,
-    })
-
-
 @login_required
 @require_POST
-def secure_link_toggle_revoke(request, pk):
-    """Revoca (elimina definitivamente) un enlace temporal propio."""
-    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
-    item_name = link.title
-    link.delete()
+def shared_password_create(request):
+    """Crea una contraseña compartida por enlace público temporal (máx. 3 días).
+
+    Recibe la contraseña en texto plano (vía form en modal) y devuelve JSON con
+    la URL pública. GET no está permitido: la creación siempre es vía modal.
+    """
+    password = (request.POST.get('password') or '').strip()
+    if not password:
+        return JsonResponse({'status': 'error', 'message': _('Ingresa la contraseña que deseas compartir.')})
+    if len(password) > 4096:
+        return JsonResponse({'status': 'error', 'message': _('La contraseña es demasiado larga (máx. 4096 caracteres).')})
+
+    try:
+        days = int(request.POST.get('days') or '3')
+    except (TypeError, ValueError):
+        days = 3
+    days = max(1, min(days, 3))
+
+    share = SharedPassword.objects.create(
+        token=_secrets.token_urlsafe(32),
+        created_by=request.user,
+        days=days,
+        expires_at=timezone.now() + timedelta(days=days),
+    )
+    share.set_password(password)
+    share.save(update_fields=['password_encrypted', 'password_nonce', 'password_salt'])
+
     from apps.audit.models import AuditLog
     AuditLog.objects.create(
         user=request.user,
-        action='LINK_REVOKED',
-        details=f'Revoked (deleted) public link {item_name}',
+        action='PASSWORD_SHARED',
+        details=f'Created public share for a pasted password ({days} days)',
         result='success',
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
-    messages.success(request, _('Enlace revocado y eliminado.'))
-    return redirect('passwords:secure_links_list')
-
-
-@login_required
-@require_POST
-def secure_link_extend(request, pk):
-    """Extiende la vigencia de un enlace temporal propio, sin superar el
-    máximo de 7 días en total desde su creación."""
-    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
-    form = SecureLinkForm(request.POST)
-    if form.is_valid():
-        days = form.cleaned_data['days']
-        base = max(link.expires_at, timezone.now())
-        cap = link.created_at + timedelta(days=7)
-        proposed = base + timedelta(days=days)
-        if proposed > cap:
-            proposed = cap
-        days_added = (proposed - max(link.expires_at, timezone.now())).days
-        link.expires_at = proposed
-        link.is_revoked = False
-        link.save(update_fields=['expires_at', 'is_revoked'])
-        from apps.audit.models import AuditLog
-        AuditLog.objects.create(
-            user=request.user,
-            action='LINK_EXTENDED',
-            details=f'Extended public link {link.title} by {days_added} days',
-            result='success',
-            ip_address=request.META.get('REMOTE_ADDR', ''),
-        )
-        if days_added > 0:
-            messages.success(request, _('Vigencia extendida %(days)s día(s).') % {'days': days_added})
-        else:
-            messages.info(request, _('El enlace ya está en su vigencia máxima (7 días).'))
-    else:
-        messages.error(request, _('Rango de días inválido (1-7).'))
-    return redirect('passwords:secure_links_list')
-
-
-@login_required
-@require_POST
-def secure_link_send_email(request, pk):
-    """Envía por correo (SMTP) la URL de un enlace temporal propio al
-    destinatario indicado. Responde JSON para flujos AJAX."""
-    link = get_object_or_404(SecureLink, pk=pk, created_by=request.user)
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    email = (request.POST.get('email') or '').strip()
-    if not email or '@' not in email or len(email) > 254:
-        message = _('Ingresa un correo de destino válido.')
-        if is_ajax:
-            return JsonResponse({'status': 'error', 'message': message})
-        messages.error(request, message)
-        return redirect('passwords:secure_links_list')
 
     url = request.build_absolute_uri(
-        reverse('public_link', kwargs={'token': link.token})
+        reverse('public_link', kwargs={'token': share.token})
     )
-    from apps.mailer.services import send_secure_link_email
-    ok, error = send_secure_link_email(email, url, link.title)
-    from apps.audit.models import AuditLog
-    AuditLog.objects.create(
-        user=request.user,
-        action='LINK_EMAILED',
-        details=f'Sent public link by email to {email} for {link.title}',
-        result='success' if ok else 'error',
-        ip_address=request.META.get('REMOTE_ADDR', ''),
-    )
-    if ok:
-        message = _('Enlace enviado a %(email)s.') % {'email': email}
-    else:
-        message = _('No se pudo enviar el correo: %(error)s') % {'error': error}
-    if is_ajax:
-        return JsonResponse({'status': 'ok' if ok else 'error', 'message': message})
-    if ok:
-        messages.success(request, message)
-    else:
-        messages.error(request, message)
-    return redirect('passwords:secure_links_list')
+    return JsonResponse({
+        'status': 'ok',
+        'url': url,
+        'pk': str(share.pk),
+        'days': days,
+        'expires_at': share.expires_at.strftime('%d/%m/%Y %H:%M'),
+    })
 
 
-def public_link_view(request, token):
-    """Vista pública sin autenticación: muestra los datos del registro detrás
-    del enlace temporal, con botones de copia."""
-    link = get_object_or_404(SecureLink, token=token)
+def shared_password_view(request, token):
+    """Vista pública (sin autenticación): muestra la contraseña compartida
+    nublada, con botones de copiar y ojito para revelarla."""
+    share = get_object_or_404(SharedPassword, token=token)
     now = timezone.now()
 
     status = 'valid'
-    if link.is_revoked:
-        status = 'revoked'
-    elif now > link.expires_at:
+    if now > share.expires_at:
         status = 'expired'
 
-    item = None
-    if status == 'valid':
-        if link.kind == 'entry':
-            item = link.entry
-            if not item or item.is_deleted or item.is_obsolete:
-                status = 'unavailable'
-        elif link.kind == 'secret':
-            item = link.secret
-            if not item or item.is_deleted or item.is_obsolete:
-                status = 'unavailable'
-
-    context = {'status': status, 'link': link}
+    context = {'status': status, 'expires_at': share.expires_at}
 
     if status == 'valid':
-        SecureLink.objects.filter(pk=link.pk).update(
+        SharedPassword.objects.filter(pk=share.pk).update(
             access_count=F('access_count') + 1,
             last_accessed_at=now,
         )
-        context['days_left'] = link.days_left()
-        if link.kind == 'entry':
-            context.update({
-                'kind': 'entry',
-                'title': item.name,
-                'username': item.get_username(),
-                'password': item.get_password(),
-                'masked_password': '********',
-                'url': item.url,
-                'notes': item.get_notes(),
-            })
-        elif link.kind == 'secret':
-            context.update({
-                'kind': 'secret',
-                'title': item.name,
-                'secret_type': item.get_type_display(),
-                'fields': item.get_fields_display(),
-                'notes': item.get_notes(),
-            })
+        context['days_left'] = share.days_left()
+        context['password'] = share.get_password()
 
-    return render(request, 'public/public_link.html', context)
+    return render(request, 'public/shared_password.html', context)
+

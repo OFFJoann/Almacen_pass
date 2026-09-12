@@ -18,7 +18,7 @@
         {% include 'includes/sidebar.html' %}
         <div class="main-content" id="mainContent">
             {% include 'includes/navbar.html' %}
-            <div class="container-fluid p-4">
+            <div class="container-fluid p-4 pt-3">
                 {% include 'includes/messages.html' %}
                 {% if license_status.configured and not license_status.valid %}
                 <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">

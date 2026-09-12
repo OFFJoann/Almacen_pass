@@ -472,61 +472,50 @@ class Attachment(models.Model):
         return self.filename
 
 
-class SecureLink(models.Model):
-    """Enlace público temporal (estilo pwpush) para compartir a usuarios
-    externos una contraseña o un secreto de forma puntual. El acceso es por
-    token (sin autenticación), con vigencia máxima de días y revocable."""
-
-    KIND_PASSWORD = 'entry'
-    KIND_SECRET = 'secret'
-    KIND_CHOICES = [
-        (KIND_PASSWORD, _('Contraseña')),
-        (KIND_SECRET, _('Secreto')),
-    ]
+class SharedPassword(models.Model):
+    """Contraseña compartida por enlace público temporal. Conceptualmente es un
+    pwpush: quien la crea pega una contraseña suelta, se cifra y se expone a
+    través de un enlace con token sin autenticación, con vigencia máxima de
+    3 días."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     token = models.CharField(_('token'), max_length=64, unique=True, db_index=True)
-    kind = models.CharField(_('tipo'), max_length=10, choices=KIND_CHOICES)
-    entry = models.ForeignKey(
-        PasswordEntry, on_delete=models.CASCADE, null=True, blank=True,
-        related_name='secure_links'
-    )
-    secret = models.ForeignKey(
-        'secrets.Secret', on_delete=models.CASCADE, null=True, blank=True,
-        related_name='secure_links'
-    )
+    password_encrypted = models.TextField(_('contraseña cifrada'), blank=True, default='')
+    password_nonce = models.TextField(blank=True, default='')
+    password_salt = models.TextField(blank=True, default='')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-        related_name='secure_links'
+        related_name='shared_passwords'
     )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     expires_at = models.DateTimeField(_('expira el'))
     days = models.PositiveSmallIntegerField(_('días de vigencia'), default=3)
-    is_revoked = models.BooleanField(_('revocado'), default=False)
     access_count = models.PositiveIntegerField(_('visitas'), default=0)
     last_accessed_at = models.DateTimeField(_('último acceso'), null=True, blank=True)
 
     class Meta:
-        verbose_name = _('enlace temporal')
-        verbose_name_plural = _('enlaces temporales')
+        verbose_name = _('contraseña compartida')
+        verbose_name_plural = _('contraseñas compartidas')
         ordering = ['-created_at']
 
     def __str__(self):
-        return self.title
+        return f'Contraseña compartida {self.token[:8]}…'
 
-    @property
-    def title(self):
-        if self.entry:
-            return self.entry.name
-        if self.secret:
-            return self.secret.name
-        return '—'
+    def set_password(self, plaintext):
+        if not plaintext:
+            return
+        encrypted = encrypt_field(plaintext)
+        self.password_encrypted = encrypted['ciphertext']
+        self.password_nonce = encrypted['nonce']
+        self.password_salt = encrypted['salt']
+
+    def get_password(self):
+        if not self.password_encrypted:
+            return ''
+        return decrypt_field(self.password_encrypted, self.password_nonce, self.password_salt)
 
     def is_expired(self):
         return timezone.now() > self.expires_at
-
-    def is_active(self):
-        return not self.is_revoked and not self.is_expired()
 
     def days_left(self):
         import math

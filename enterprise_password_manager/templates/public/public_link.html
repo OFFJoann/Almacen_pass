@@ -1,5 +1,0 @@
-{% extends 'base.html' %}
-{% load static %}
-{% block title %}{% if status == 'valid' %}{{ title }} - Enlace compartido{% else %}Enlace no disponible{% endif %}{% endblock %}
-{% block content %}{% include 'includes/public_link_content.html' %}{% endblock %}
-{% block auth_content %}{% include 'includes/public_link_content.html' %}{% endblock %}
