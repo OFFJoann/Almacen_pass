@@ -45,10 +45,6 @@ urlpatterns = [
     path('entry/<uuid:pk>/totp/current/', views.totp_current, name='totp_current'),
     path('entry/<uuid:pk>/copy-data/', views.entry_copy_data, name='entry_copy_data'),
     path('entry/<uuid:pk>/history/<uuid:hist_pk>/restore/', views.password_history_restore, name='password_history_restore'),
-    path('secure-links/', views.secure_links_list, name='secure_links_list'),
-    path('secure-link/create/<str:kind>/<uuid:pk>/', views.secure_link_create, name='secure_link_create'),
-    path('secure-links/<uuid:pk>/revoke/', views.secure_link_toggle_revoke, name='secure_link_revoke'),
-    path('secure-links/<uuid:pk>/extend/', views.secure_link_extend, name='secure_link_extend'),
-    path('secure-links/<uuid:pk>/email/', views.secure_link_send_email, name='secure_link_email'),
+    path('share/', views.shared_password_create, name='shared_password_create'),
     path('onboarding/complete/', views.complete_onboarding, name='onboarding_complete'),
 ]

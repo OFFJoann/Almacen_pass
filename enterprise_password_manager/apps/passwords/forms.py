@@ -208,12 +208,20 @@ class ExportForm(forms.Form):
     )
 
 
-class SecureLinkForm(forms.Form):
+class SharedPasswordForm(forms.Form):
+    password = forms.CharField(
+        label=_('Contraseña a compartir'),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control text-monospace',
+            'rows': 3,
+            'placeholder': _('Pega aquí la contraseña que deseas compartir…'),
+            'maxlength': 4096,
+        }),
+    )
     days = forms.IntegerField(
-        label=_('Días de vigencia'),
+        label=_('Vigencia'),
         min_value=1,
-        max_value=7,
+        max_value=3,
         initial=3,
-        help_text=_('Máximo 7 días. Al expirar, el enlace dejará de funcionar.'),
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 7})
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 3})
     )

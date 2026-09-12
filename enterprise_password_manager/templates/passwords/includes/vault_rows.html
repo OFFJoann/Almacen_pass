@@ -40,7 +40,6 @@
         <div class="d-inline-flex align-items-center gap-1">
             <div class="btn-group btn-group-sm">
                 <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
-                <button type="button" class="btn btn-outline-warning" title="Enlace temporal" onclick="openSecureLinkModal('entry', '{{ entry.pk }}')"><i class="bi bi-link-45deg"></i></button>
                 <button type="button" class="btn btn-outline-info" title="Compartir" onclick="openShareModal('{{ entry.pk }}', '{{ entry.name|escapejs }}')"><i class="bi bi-share"></i></button>
                  <button type="button" class="btn btn-outline-warning" title="Mover de carpeta" onclick="openMoveModal('{{ entry.pk }}', '{{ entry.folder.id|default:'' }}')"><i class="bi bi-folder-symlink"></i></button>
                 <button type="button" class="btn btn-outline-secondary" title="Editar" onclick="openEditModal('{{ entry.pk }}')"><i class="bi bi-pencil"></i></button>
