@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.template.loader import render_to_string
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
@@ -286,6 +287,23 @@ def secret_share(request, pk):
                     'compartido_con': target,
                     'nombre_servicio': secret.name,
                 }, extra_recipients=extra_recipients)
+
+                from apps.notifications.models import Notification
+                shared_to = []
+                if target_user:
+                    shared_to.append(target_user)
+                elif target_group:
+                    shared_to = list(target_group.members.filter(is_active=True))
+                sharer = request.user.full_name or request.user.email
+                for member in shared_to:
+                    Notification.objects.create(
+                        user=member,
+                        title=_('Secreto compartido'),
+                        message=_('%(sharer)s te compartió el secreto «%(name)s».')
+                                 % {'sharer': sharer, 'name': secret.name},
+                        notification_type='success',
+                        action_url=reverse('secrets:detail', kwargs={'pk': secret.pk}),
+                    )
                 messages.success(request, _('Secreto compartido exitosamente.'))
             if is_ajax:
                 return JsonResponse({'status': 'ok', 'message': _('Secreto compartido exitosamente.')})

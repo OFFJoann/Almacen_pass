@@ -277,7 +277,7 @@
                                                 {% if share.permission == 'write' %}
                                                     <a href="{% url 'passwords:entry_edit' share.entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
                                                 {% elif share.permission == 'reshare' %}
-                                                    <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Re-compartir"><i class="bi bi-share"></i></a>
+                                                    <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
                                                 {% endif %}
                                             </div>
                                             <button type="button" class="btn btn-sm btn-outline-danger" title="Revocar mi acceso" onclick="ticoConfirm('¿Revocar tu acceso a este registro compartido?', 'revoke-pw-received-{{ share.pk }}')"><i class="bi bi-x-lg"></i></button>
@@ -352,7 +352,7 @@
                     <select class="form-control" id="bulkSharePermission">
                         <option value="read">Solo Lectura</option>
                         <option value="write">Puede Editar</option>
-                        <option value="reshare">Puede Re-compartir</option>
+                        <option value="reshare">Puede Compartir</option>
                     </select>
                 </div>
                 <div class="mb-1">

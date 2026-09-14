@@ -8,7 +8,7 @@ from .models import Notification
 
 @login_required
 def notification_list(request):
-    notifications = Notification.objects.filter(user=request.user)[:50]
+    notifications = Notification.objects.filter(user=request.user, is_read=False).order_by('-created_at')[:50]
     unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
     return render(request, 'notifications/list.html', {
         'notifications': notifications,

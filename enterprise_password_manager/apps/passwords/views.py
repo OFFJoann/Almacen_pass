@@ -629,7 +629,7 @@ def entry_share(request, pk):
             Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user)
         ).exists()
         if not can_reshare:
-            raise PermissionDenied(_('No tienes permiso para re-compartir esta contraseña.'))
+            raise PermissionDenied(_('No tienes permiso para compartir esta contraseña.'))
 
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
@@ -647,7 +647,7 @@ def entry_share(request, pk):
                 duration = _('sin expiración') if not share_request.requested_days else f'{share_request.requested_days} día(s)'
                 Notification.objects.create(
                     user=owner,
-                    title=_('Solicitud de re-compartición'),
+                    title=_('Solicitud de compartir'),
                     message=_('%(requester)s solicita compartir «%(entry)s» con %(target)s (duración: %(duration)s).')
                              % {'requester': request.user.full_name or request.user.email,
                                 'entry': entry.name,
@@ -667,11 +667,11 @@ def entry_share(request, pk):
                 AuditLog.objects.create(
                     user=request.user,
                     action='SHARE_REQUESTED',
-                    details=f'Requested reshare: {entry.name} with {share_request.target_user.email} for {share_request.requested_days} days',
+                    details=f'Requested share: {entry.name} with {share_request.target_user.email} for {share_request.requested_days} days',
                     result='success',
                     ip_address=request.META.get('REMOTE_ADDR', ''),
                 )
-                messages.success(request, _('Se envió la solicitud de re-compartición al dueño del registro. Espera su aprobación.'))
+                messages.success(request, _('Se envió la solicitud de compartir al dueño del registro. Espera su aprobación.'))
                 if is_ajax:
                     return JsonResponse({'status': 'ok', 'message': _('Solicitud enviada al dueño del registro. Espera su aprobación.')})
                 return redirect('passwords:detail', pk=entry.pk)
@@ -737,6 +737,23 @@ def entry_share(request, pk):
                     'nombre_servicio': entry.name,
                     'url': entry.url or '/',
                 }, recipients=recipients)
+
+                shared_to = []
+                if target_user:
+                    shared_to.append(target_user)
+                elif target_group:
+                    shared_to = list(target_group.members.filter(is_active=True))
+                sharer = request.user.full_name or request.user.email
+                detail_url = reverse('passwords:detail', kwargs={'pk': entry.pk})
+                for member in shared_to:
+                    Notification.objects.create(
+                        user=member,
+                        title=_('Contraseña compartida'),
+                        message=_('%(sharer)s te compartió la contraseña «%(entry)s».')
+                                 % {'sharer': sharer, 'entry': entry.name},
+                        notification_type='success',
+                        action_url=detail_url,
+                    )
                 messages.success(request, _('Contraseña compartida exitosamente'))
 
             if is_ajax:
@@ -867,6 +884,13 @@ def share_request_approve(request, request_id):
     entry = share_request.entry
     target = share_request.target_user
     now = timezone.now()
+    if target.pk == entry.vault.user_id:
+        share_request.status = 'denied'
+        share_request.responded_by = request.user
+        share_request.responded_at = now
+        share_request.save(update_fields=['status', 'responded_by', 'responded_at'])
+        messages.error(request, _('No se puede compartir un registro con su propio dueño.'))
+        return redirect('passwords:share_requests')
     if share_request.requested_days:
         expires_at = now + timezone.timedelta(days=share_request.requested_days)
     else:
@@ -897,7 +921,7 @@ def share_request_approve(request, request_id):
     sharer_name = request.user.full_name or request.user.email
     Notification.objects.create(
         user=share_request.requested_by,
-        title=_('Re-compartición aprobada'),
+        title=_('Compartición aprobada'),
         message=_('Tu solicitud para compartir «%(entry)s» con %(target)s (duración: %(duration)s) fue aprobada.')
                  % {'entry': entry.name, 'target': target.email, 'duration': duration},
         notification_type='success',
@@ -917,7 +941,7 @@ def share_request_approve(request, request_id):
     AuditLog.objects.create(
         user=request.user,
         action='SHARE_APPROVED',
-        details=f'Approved reshare request: {entry.name} with {target.email} for {duration}',
+        details=f'Approved share request: {entry.name} with {target.email} for {duration}',
         result='success',
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
@@ -951,7 +975,7 @@ def share_request_deny(request, request_id):
 
     Notification.objects.create(
         user=share_request.requested_by,
-        title=_('Re-compartición denegada'),
+        title=_('Compartición denegada'),
         message=_('Tu solicitud para compartir «%(entry)s» con %(target)s fue denegada.')
                  % {'entry': share_request.entry.name, 'target': share_request.target_user.email},
         notification_type='warning',
@@ -961,7 +985,7 @@ def share_request_deny(request, request_id):
     AuditLog.objects.create(
         user=request.user,
         action='SHARE_DENIED',
-        details=f'Denied reshare request: {share_request.entry.name} with {share_request.target_user.email}',
+        details=f'Denied share request: {share_request.entry.name} with {share_request.target_user.email}',
         result='success',
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
@@ -1866,7 +1890,7 @@ def complete_onboarding(request):
 @login_required
 @require_POST
 def shared_password_create(request):
-    """Crea una contraseña compartida por enlace público temporal (máx. 3 días).
+    """Crea una contraseña compartida por enlace público temporal (máx. 7 días).
 
     Recibe la contraseña en texto plano (vía form en modal) y devuelve JSON con
     la URL pública. GET no está permitido: la creación siempre es vía modal.
@@ -1878,15 +1902,25 @@ def shared_password_create(request):
         return JsonResponse({'status': 'error', 'message': _('La contraseña es demasiado larga (máx. 4096 caracteres).')})
 
     try:
-        days = int(request.POST.get('days') or '3')
+        days = int(request.POST.get('days') or '7')
     except (TypeError, ValueError):
-        days = 3
-    days = max(1, min(days, 3))
+        days = 7
+    days = max(1, min(days, 7))
+
+    max_uses_raw = request.POST.get('max_uses', '').strip()
+    max_uses = 7
+    if max_uses_raw:
+        try:
+            max_uses = int(max_uses_raw)
+        except (TypeError, ValueError):
+            max_uses = 7
+        max_uses = max(1, min(max_uses, 7))
 
     share = SharedPassword.objects.create(
         token=_secrets.token_urlsafe(32),
         created_by=request.user,
         days=days,
+        max_uses=max_uses,
         expires_at=timezone.now() + timedelta(days=days),
     )
     share.set_password(password)
@@ -1896,7 +1930,7 @@ def shared_password_create(request):
     AuditLog.objects.create(
         user=request.user,
         action='PASSWORD_SHARED',
-        details=f'Created public share for a pasted password ({days} days)',
+        details=f'Created public share for a pasted password ({days} days, max {max_uses} uses)',
         result='success',
         ip_address=request.META.get('REMOTE_ADDR', ''),
     )
@@ -1909,28 +1943,41 @@ def shared_password_create(request):
         'url': url,
         'pk': str(share.pk),
         'days': days,
+        'max_uses': max_uses,
         'expires_at': share.expires_at.strftime('%d/%m/%Y %H:%M'),
     })
 
 
 def shared_password_view(request, token):
     """Vista pública (sin autenticación): muestra la contraseña compartida
-    nublada, con botones de copiar y ojito para revelarla."""
+    nublada, con botones de copiar y ojito para revelarla.
+
+    El enlace se bloquea si expiró por tiempo o si se agotó el límite de visitas.
+    """
     share = get_object_or_404(SharedPassword, token=token)
     now = timezone.now()
 
     status = 'valid'
     if now > share.expires_at:
         status = 'expired'
+    elif share.is_exhausted():
+        status = 'exhausted'
 
-    context = {'status': status, 'expires_at': share.expires_at}
+    context = {
+        'status': status,
+        'expires_at': share.expires_at,
+        'days_left': share.days_left(),
+        'max_uses': share.max_uses,
+        'access_count': share.access_count,
+    }
 
     if status == 'valid':
         SharedPassword.objects.filter(pk=share.pk).update(
             access_count=F('access_count') + 1,
             last_accessed_at=now,
         )
-        context['days_left'] = share.days_left()
+        share.access_count += 1
+        context['uses_left'] = share.uses_left()
         context['password'] = share.get_password()
 
     return render(request, 'public/shared_password.html', context)

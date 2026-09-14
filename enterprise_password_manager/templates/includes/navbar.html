@@ -22,8 +22,34 @@
                         </span>
                     {% endif %}
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg" style="min-width: 300px;">
+                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg" style="min-width: 320px; max-height: 60vh; overflow-y:auto;">
                     <li><h6 class="dropdown-header">Notificaciones</h6></li>
+                    <li><hr class="dropdown-divider"></li>
+                    {% if recent_notifications %}
+                        {% for n in recent_notifications %}
+                        <li data-bell-nid="{{ n.pk }}">
+                            <a class="dropdown-item d-flex {% if not n.is_read %}fw-semibold{% endif %}" href="{% if n.action_url %}{{ n.action_url }}{% else %}{% url 'notifications:list' %}{% endif %}">
+                                <span class="me-2 mt-1">
+                                    {% if n.notification_type == 'success' %}<i class="bi bi-check-circle-fill text-success"></i>
+                                    {% elif n.notification_type == 'warning' %}<i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                                    {% elif n.notification_type == 'error' or n.notification_type == 'security' %}<i class="bi bi-shield-exclamation text-danger"></i>
+                                    {% elif n.notification_type == 'info' %}<i class="bi bi-info-circle-fill text-info"></i>
+                                    {% else %}<i class="bi bi-bell text-secondary"></i>{% endif %}
+                                </span>
+                                <span class="flex-grow-1">
+                                    <span class="d-block text-truncate">{{ n.title }}</span>
+                                    <span class="d-block small text-muted text-truncate">{{ n.message }}</span>
+                                    <span class="d-block small text-muted">{{ n.created_at|timesince }} atrás</span>
+                                </span>
+                                {% if not n.is_read %}
+                                    <span class="ms-2 badge bg-primary rounded-pill" style="width:8px;height:8px;padding:0;"></span>
+                                {% endif %}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <li><span class="dropdown-item-text text-muted text-center py-3">Sin notificaciones</span></li>
+                    {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li class="text-center py-2">
                         <a href="{% url 'notifications:list' %}" class="btn btn-sm btn-link">Ver Todas</a>

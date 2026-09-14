@@ -325,7 +325,7 @@ class Share(models.Model):
     PERMISSION_CHOICES = [
         ('read', _('Solo Lectura')),
         ('write', _('Puede Editar')),
-        ('reshare', _('Puede Re-compartir')),
+        ('reshare', _('Puede Compartir')),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -440,8 +440,8 @@ class ShareRequest(models.Model):
     responded_at = models.DateTimeField(_('respondido el'), null=True, blank=True)
 
     class Meta:
-        verbose_name = _('solicitud de re-compartición')
-        verbose_name_plural = _('solicitudes de re-compartición')
+        verbose_name = _('solicitud de compartir')
+        verbose_name_plural = _('solicitudes de compartir')
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['entry']),
@@ -489,7 +489,11 @@ class SharedPassword(models.Model):
     )
     created_at = models.DateTimeField(_('creado el'), default=timezone.now)
     expires_at = models.DateTimeField(_('expira el'))
-    days = models.PositiveSmallIntegerField(_('días de vigencia'), default=3)
+    days = models.PositiveSmallIntegerField(_('días de vigencia'), default=7)
+    max_uses = models.PositiveIntegerField(
+        _('visitas máximas'), default=7,
+        help_text=_('Número máximo de veces que se puede abrir el enlace. Límite fijo de 7; vacío = 7.'),
+    )
     access_count = models.PositiveIntegerField(_('visitas'), default=0)
     last_accessed_at = models.DateTimeField(_('último acceso'), null=True, blank=True)
 
@@ -516,6 +520,12 @@ class SharedPassword(models.Model):
 
     def is_expired(self):
         return timezone.now() > self.expires_at
+
+    def is_exhausted(self):
+        return self.access_count >= (self.max_uses or 7)
+
+    def uses_left(self):
+        return max(0, (self.max_uses or 7) - self.access_count)
 
     def days_left(self):
         import math
