@@ -245,3 +245,16 @@ body {
     align-items: center;
     gap: 0.5rem;
 }
+
+/* El zoom de página escala las unidades vw/vh; el backdrop del modal usa 100vw/100vh
+   y con zoom se queda corto. Cubrimos con % + inset fijo. */
+.modal-backdrop {
+    position: fixed;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+}
