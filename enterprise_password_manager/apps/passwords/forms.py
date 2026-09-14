@@ -153,13 +153,18 @@ class ShareRequestForm(forms.Form):
         self.user = user
         self.entry = entry
         if user:
-            self.fields['target_user'].queryset = User.objects.filter(is_active=True).exclude(pk=user.pk)
+            qs = User.objects.filter(is_active=True).exclude(pk=user.pk)
+            if entry is not None:
+                qs = qs.exclude(pk=entry.vault.user_id)
+            self.fields['target_user'].queryset = qs
 
     def clean(self):
         cleaned = super().clean()
         target = cleaned.get('target_user')
         if not target or not self.entry or not self.user:
             return cleaned
+        if target.pk == self.entry.vault.user_id:
+            self.add_error('target_user', _('El dueño del registro ya tiene acceso a él.'))
         has_access = Share.objects.filter(
             entry=self.entry, is_revoked=False, shared_with_user=target
         ).filter(
@@ -221,7 +226,18 @@ class SharedPasswordForm(forms.Form):
     days = forms.IntegerField(
         label=_('Vigencia'),
         min_value=1,
-        max_value=3,
-        initial=3,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 3})
+        max_value=7,
+        initial=7,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 7})
+    )
+    max_uses = forms.IntegerField(
+        label=_('Veces que se puede usar'),
+        required=False,
+        min_value=1,
+        max_value=7,
+        initial=7,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control', 'min': 1, 'max': 7, 'placeholder': '7',
+        }),
+        help_text=_('Límite fijo de 7. Si se deja vacío se aplican 7 visitas.'),
     )

@@ -117,7 +117,7 @@ class SecretShare(models.Model):
     PERMISSION_CHOICES = [
         ('read', _('Solo Lectura')),
         ('write', _('Puede Editar')),
-        ('reshare', _('Puede Re-compartir')),
+        ('reshare', _('Puede Compartir')),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
