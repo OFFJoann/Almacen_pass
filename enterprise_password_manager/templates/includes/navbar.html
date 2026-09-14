@@ -10,8 +10,8 @@
             <a href="{% url 'passwords:password_generator' %}" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#passwordGeneratorModal">
                 <i class="bi bi-dice-6"></i> Generar
             </a>
-            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#sharePasswordModal">
-                <i class="bi bi-share"></i> Compartir
+            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#sharePasswordModal" onclick="resetSharePwModal()">
+                <i class="bi bi-link-45deg"></i> Compartir enlace seguro
             </button>
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary position-relative border-0" type="button" data-bs-toggle="dropdown">
