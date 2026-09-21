@@ -27,6 +27,7 @@ from .forms import (PasswordEntryForm, FolderForm, CategoryForm, TagForm,
                      ShareForm, ShareRequestForm, ImportForm, ExportForm)
 from .encryption import generate_password, generate_passphrase, calculate_entropy, password_strength, strength_percentage
 from apps.mailer.services import domain_from_url
+from urllib.parse import urlparse
 
 
 _STRENGTH_COLORS = {
@@ -1020,6 +1021,79 @@ def password_generator(request):
     })
 
 
+def _parse_rf_cell(cell):
+    """Parsea una celda RfFieldsV2 de RoboForm; devuelve lista de (clave, valor).
+
+    El formato plano de RoboForm es:  <Nombre>,,,,<valor>
+    (también soporta el JSON antiguo cuyos valores son listas de 5 elementos).
+    """
+    if not cell:
+        return []
+    cell = cell.strip()
+    if cell.startswith('{'):
+        try:
+            data = json.loads(cell)
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            pairs = []
+            for k, v in data.items():
+                value = ''
+                if isinstance(v, (list, tuple)) and len(v) >= 5 and v[4]:
+                    value = str(v[4])
+                elif isinstance(v, str):
+                    value = v
+                if k and value:
+                    pairs.append((k.strip(), value.strip()))
+            return pairs
+    parts = cell.split(',')
+    key = (parts[0] or '').strip()
+    if len(parts) >= 5:
+        value = (parts[4] or '').strip()
+    elif len(parts) == 2:
+        value = (parts[1] or '').strip()
+    else:
+        value = ''
+    return [(key, value)] if key and value else []
+
+
+def _norm_url_host(url):
+    try:
+        host = urlparse(url).netloc.lower()
+        return host[4:] if host.startswith('www.') else host
+    except Exception:
+        return ''
+
+
+def _domain_user_from_note(note):
+    """Convierte un note tipo 'dominio\\usuario' en el login cuando no hay otro."""
+    if not note or '\\' not in note:
+        return ''
+    parts = note.strip().split('\\')
+    if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+        return note.strip()
+    return ''
+
+
+def _find_matching_entry(vault, url, username):
+    """Entrada del mismo sitio (host + usuario) para completar 2FA/datos."""
+    host = _norm_url_host(url)
+    if not host:
+        return None
+    candidates = list(
+        PasswordEntry.objects.filter(vault=vault, is_deleted=False, url__icontains=host)
+    )
+    uname = (username or '').strip().lower()
+    if uname:
+        for e in candidates:
+            if e.get_username().strip().lower() == uname:
+                return e
+    for e in candidates:
+        if not e.totp_secret_encrypted:
+            return e
+    return candidates[0] if candidates else None
+
+
 @login_required
 def import_passwords(request):
     if request.method == 'POST':
@@ -1029,6 +1103,7 @@ def import_passwords(request):
             file = request.FILES['file']
             vault, created = Vault.objects.get_or_create(user=request.user)
             imported_count = 0
+            updated_count = 0
 
             try:
                 if source == 'csv':
@@ -1058,10 +1133,19 @@ def import_passwords(request):
                         imported_count += 1
 
                 elif source == 'roboform':
-                    import json as json_module
                     decoded = file.read().decode('utf-8-sig')
                     reader = csv.DictReader(io.StringIO(decoded))
                     for row in reader:
+                        # RfFieldsV2 puede venir en varias celdas (los excedentes
+                        # quedan en la fila bajo la clave None de DictReader).
+                        rf_cells = []
+                        first = row.get('RfFieldsV2') or row.get('Rf_fields')
+                        if first:
+                            rf_cells.append(first)
+                        extra = row.get(None)
+                        if extra:
+                            rf_cells.extend(extra if isinstance(extra, (list, tuple)) else [extra])
+
                         entry = PasswordEntry(vault=vault)
                         entry.name = row.get('Name', row.get('name', ''))
                         entry.url = row.get('Url', row.get('URL', ''))
@@ -1069,28 +1153,41 @@ def import_passwords(request):
                         entry.set_password(row.get('Pwd', row.get('Password', row.get('password', ''))))
                         entry.set_notes(row.get('Note', row.get('Notes', row.get('notes', ''))))
 
-                        # RfFieldsV2 / Rf_fields: JSON con campos adicionales
-                        # (User ID$, Password$, TOTP Key$, Script$ y campos personalizados).
-                        rf = row.get('RfFieldsV2') or row.get('Rf_fields')
-                        if rf:
-                            try:
-                                rf_data = json_module.loads(rf)
-                                if isinstance(rf_data, dict):
-                                    for k, v in rf_data.items():
-                                        value = ''
-                                        if isinstance(v, (list, tuple)) and len(v) >= 5:
-                                            value = str(v[4] or '')
-                                        elif isinstance(v, str):
-                                            value = v
-                                        key = (k or '').lower()
-                                        if not entry.get_username() and ('user id' in key or key == 'login'):
-                                            entry.set_username(value)
-                                        elif not entry.get_password() and key == 'password$':
-                                            entry.set_password(value)
-                                        elif 'totp' in key and value:
-                                            entry.set_totp_secret(value)
-                            except Exception:
-                                pass
+                        totp_value = ''
+                        for cell in rf_cells:
+                            for field_key, field_value in _parse_rf_cell(cell):
+                                k = (field_key or '').lower()
+                                if not entry.get_username() and ('user id' in k or k in ('login$', 'login')):
+                                    entry.set_username(field_value)
+                                elif not entry.get_password() and ('password$' in k or 'pwd$' in k or k == 'password'):
+                                    entry.set_password(field_value)
+                                elif 'totp' in k and field_value:
+                                    totp_value = field_value
+
+                        if not entry.get_username():
+                            entry.set_username(_domain_user_from_note(entry.get_notes()))
+
+                        # Si el sitio ya existe, se completa 2FA/usuarios faltantes
+                        # en la entrada actual en vez de crear un duplicado.
+                        existing = _find_matching_entry(vault, entry.url, entry.get_username()) if totp_value else None
+                        if existing:
+                            changed = False
+                            if totp_value and not existing.totp_secret_encrypted:
+                                existing.set_totp_secret(totp_value)
+                                changed = True
+                            if not existing.get_username() and entry.get_username():
+                                existing.set_username(entry.get_username())
+                                changed = True
+                            if not existing.get_password() and entry.get_password():
+                                existing.set_password(entry.get_password())
+                                changed = True
+                            if changed:
+                                existing.save()
+                                updated_count += 1
+                            continue
+
+                        if totp_value:
+                            entry.set_totp_secret(totp_value)
 
                         if entry.name or entry.get_password() or entry.get_username():
                             entry.save()
@@ -1131,7 +1228,14 @@ def import_passwords(request):
                     ip_address=request.META.get('REMOTE_ADDR', ''),
                 )
 
-                messages.success(request, _(f'Se importaron {imported_count} contraseñas exitosamente'))
+                messages.success(
+                    request,
+                    _(
+                        f'Se importaron {imported_count} contraseñas'
+                        + (f' y se actualizaron {updated_count} con 2FA/datos faltantes' if updated_count else '')
+                        + ' exitosamente'
+                    ),
+                )
             except Exception as e:
                 messages.error(request, _(f'Error al importar: {str(e)}'))
 
