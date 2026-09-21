@@ -11,10 +11,15 @@
     <!-- SIN SESIÓN -->
     <section id="view-login" class="view" hidden>
       <header class="head">
-        <span class="logo">T</span>
+        <img class="logo" src="../icons/icon_conectado_128.png" alt="TICO BOX" width="38" height="38">
         <div>
           <h1>TICO BOX</h1>
           <p>Sin sesión activa</p>
+        </div>
+        <div class="head-actions" style="margin-left:auto">
+          <button class="icon-btn theme-btn" title="Cambiar tema">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-5.4-5.4c0-1.63.73-3.09 1.87-4.08A8.97 8.97 0 0 0 12 3z"/></svg>
+          </button>
         </div>
       </header>
       <p class="hint">Para usar la extensión necesitas una sesión iniciada en la aplicación web. Se abrirá la página de inicio de sesión.</p>
@@ -27,19 +32,24 @@
     <!-- MAIN -->
     <section id="view-main" class="view" hidden>
       <header class="head">
-        <span class="logo">T</span>
+        <img class="logo" src="../icons/icon_conectado_128.png" alt="TICO BOX" width="38" height="38">
         <div class="head-user">
           <h1>TICO BOX</h1>
           <p id="userEmail" class="muted"></p>
         </div>
         <div class="head-actions">
+          <button class="icon-btn theme-btn" title="Cambiar tema">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-5.4-5.4c0-1.63.73-3.09 1.87-4.08A8.97 8.97 0 0 0 12 3z"/></svg>
+          </button>
           <button class="icon-btn" id="homeBtn" title="Abrir mi bóveda">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg>
           </button>
           <button class="icon-btn" id="genBtn" title="Generador de contraseñas">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
           </button>
-          <button class="btn ghost" id="logoutBtn" title="Cerrar sesión">Salir</button>
+          <button class="icon-btn logout-btn" id="logoutBtn" title="Cerrar sesión">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M5 3h9a2 2 0 0 1 2 2v2h-2V5H5v14h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm9.5 3.5 1.41 1.41L12.32 11H21v2h-8.68l3.59 3.59L14.5 18l-6-6 6-6z"/></svg>
+          </button>
         </div>
       </header>
       <p class="error" id="mainError" hidden></p>
@@ -68,6 +78,7 @@
           <label id="genWordsWrap">Palabras <input type="range" id="genWords" min="2" max="10" value="4"><span id="genWordsVal" class="opt-val">4</span></label>
         </div>
         <button class="btn primary small" id="genRegenBtn">Regenerar</button>
+        <button class="btn success small" id="genShareBtn">Compartir enlace seguro</button>
         <button class="btn ghost small" id="genUseBtn">Usar en nuevo acceso</button>
         <p class="muted small" id="genEntropy"></p>
       </section>
@@ -78,6 +89,12 @@
           <button class="icon-btn" id="totpCloseBtn" title="Cerrar">&times;</button>
         </div>
         <div class="totp-row">
+          <div class="totp-ring" id="totpRing" hidden>
+            <svg width="30" height="30" viewBox="0 0 30 30">
+              <circle class="ring-bg" cx="15" cy="15" r="12"></circle>
+              <circle class="ring-fg" id="totpRingArc" cx="15" cy="15" r="12"></circle>
+            </svg>
+          </div>
           <span class="totp-code" id="totpCode"></span>
           <button class="icon-btn" id="totpCopyBtn" title="Copiar código">
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
@@ -136,6 +153,7 @@
           </div>
         </label>
         <button type="submit" class="btn primary small">Guardar</button>
+        <button type="button" class="btn ghost small" id="newCancelBtn">Cancelar</button>
       </form>
 
       <input type="search" id="searchInput" placeholder="Buscar accesos…" class="search">
@@ -143,8 +161,8 @@
       <div id="siteLabel" class="muted small"></div>
 
       <div class="tabs" id="tabs">
-        <button type="button" class="tab active" data-tab="site">Este sitio</button>
-        <button type="button" class="tab" data-tab="all">Todas</button>
+        <button type="button" class="tab" data-tab="site">Este sitio</button>
+        <button type="button" class="tab active" data-tab="all">Todas</button>
       </div>
 
       <div id="entriesList"></div>
@@ -154,6 +172,59 @@
         <button class="link" id="openOptions2Btn">Configurar servidor</button>
       </footer>
     </section>
+
+    <!-- MODAL PEQUEÑO DE ERROR -->
+    <div id="errorModal" class="error-modal" hidden>
+      <div class="error-modal-box">
+        <strong>2FA no valido</strong>
+        <p id="errorModalMsg"></p>
+        <button type="button" class="btn primary small" id="errorModalOk">Entendido</button>
+      </div>
+    </div>
+
+    <!-- MODAL COMPARTIR ENLACE SEGURO -->
+    <div id="shareModal" class="share-modal" hidden>
+      <div class="share-modal-box">
+        <div class="share-modal-head">
+          <strong><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0-5 5a5 5 0 0 0 5 5h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 1 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/></svg> Compartir enlace seguro</strong>
+          <button type="button" class="icon-btn" id="shareCloseBtn" title="Cerrar">&times;</button>
+        </div>
+
+        <div id="shareBody">
+          <p class="muted small hint">Se generará un enlace público con vigencia máxima de 7 días.</p>
+          <label>Contraseña
+            <textarea id="sharePassword" rows="2" maxlength="4096" placeholder="Pega aquí la contraseña que deseas compartir…"></textarea>
+          </label>
+          <div class="share-cols">
+            <label>Vigencia (días)
+              <input type="number" id="shareDays" min="1" max="7" value="7">
+            </label>
+            <label>Usos
+              <input type="number" id="shareMaxUses" min="1" max="7" value="7">
+            </label>
+          </div>
+          <button type="button" class="btn primary small" id="shareGenBtn">Generar enlace</button>
+          <p class="error" id="shareError" hidden></p>
+        </div>
+
+        <div id="shareResult" hidden>
+          <strong class="share-ok"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1.2 14.6-4-4 1.4-1.4 2.6 2.6 5.4-5.4 1.4 1.4-6.8 6.8z"/></svg> Enlace generado</strong>
+          <p class="muted small">Vigencia: <span id="shareResultDays">7</span> día(s). Usos: <span id="shareResultUses">7</span>. Expira: <span id="shareResultExpires">—</span></p>
+          <label>Enlace
+            <div class="row">
+              <input type="text" id="shareUrl" class="grow font-mono" readonly>
+              <button type="button" class="icon-btn" id="shareCopyBtn" title="Copiar enlace">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+              </button>
+            </div>
+          </label>
+          <div class="share-foot">
+            <button type="button" class="btn ghost small" id="shareAnotherBtn">Crear otro</button>
+            <button type="button" class="btn primary small" id="shareDoneBtn">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </div>
   <script src="popup.js"></script>

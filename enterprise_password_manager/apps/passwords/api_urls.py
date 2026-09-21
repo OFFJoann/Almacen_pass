@@ -10,4 +10,5 @@ router.register(r'tags', api_views.TagViewSet, basename='tag')
 
 urlpatterns = [
     path('generate/', api_views.api_generate_password, name='api_generate'),
+    path('shared-passwords/', api_views.api_share_password, name='api_share_password'),
 ] + router.urls

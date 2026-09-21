@@ -204,7 +204,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'vendor/jsqr/jsQR.js' %}"></script>
 <script>
     function togglePasswordVisibility() {
         var field = document.getElementById('passwordField');
@@ -242,94 +241,12 @@
     }
     {% if entry.has_totp %}
     startTotpTicker();
-    {% else %}
-    document.addEventListener('change', function(e) {
-        if (e.target.id !== 'qrImageInput') return;
-        var file = e.target.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function(ev) {
-            var img = new Image();
-            img.onload = function() {
-                var canvas = document.getElementById('qrCanvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                var ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                var code = jsQR(imageData.data, imageData.width, imageData.height);
-                var errorDiv = document.getElementById('qrError');
-                var secretDiv = document.getElementById('qrSecret');
-                var preview = document.getElementById('qrPreview');
-                var decodedInfo = document.getElementById('qrDecodedInfo');
-                if (code) {
-                    errorDiv.classList.add('d-none');
-                    var uri = code.data;
-                    var secret = '';
-                    if (uri.startsWith('otpauth://')) {
-                        var params = new URLSearchParams(uri.split('?')[1]);
-                        secret = params.get('secret') || '';
-                    } else {
-                        secret = uri.trim();
-                    }
-                    if (secret) {
-                        decodedInfo.innerHTML = '<i class="bi bi-check-circle"></i> QR decodificado correctamente';
-                        secretDiv.classList.remove('d-none');
-                        secretDiv.dataset.secret = secret;
-                        preview.innerHTML = '<img src="' + ev.target.result + '" class="img-fluid" style="max-width:200px">';
-                    } else {
-                        errorDiv.textContent = 'No se encontró un secreto 2FA válido en este QR';
-                        errorDiv.classList.remove('d-none');
-                    }
-                } else {
-                    errorDiv.textContent = 'No se pudo leer el QR. Intenta con una imagen más clara o usa la opción manual.';
-                    errorDiv.classList.remove('d-none');
-                    secretDiv.classList.add('d-none');
-                    preview.innerHTML = '<img src="' + ev.target.result + '" class="img-fluid" style="max-width:200px;opacity:0.5">';
-                }
-            };
-            img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-    document.addEventListener('click', function(e) {
-        if (e.target.id !== 'saveQrTotpBtn') return;
-        var secret = document.getElementById('qrSecret').dataset.secret;
-        if (!secret) return;
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{% url "passwords:totp_generate" entry.pk %}';
-        var csrf = document.createElement('input');
-        csrf.type = 'hidden';
-        csrf.name = 'csrfmiddlewaretoken';
-        csrf.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
-        form.appendChild(csrf);
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'secret';
-        input.value = secret;
-        form.appendChild(input);
-        form.style.display = 'none';
-        document.body.appendChild(form);
-        var h3 = document.getElementById('addTotpModal');
-        var modal = bootstrap.Modal.getInstance(h3);
-        if (modal) modal.hide();
-        fetch(form.action, {
-            method: 'POST',
-            body: new FormData(form),
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        }).then(function(r) { return r.text(); }).then(function(html) {
-            var parser = new DOMParser();
-            var doc = parser.parseFromString(html, 'text/html');
-            var newSection = doc.getElementById('totpSection');
-            if (newSection) {
-                document.getElementById('totpSection').outerHTML = newSection.outerHTML;
-                showToast('2FA configurado correctamente', 'success');
-                startTotpTicker();
-            }
-        });
-        form.remove();
-    });
     {% endif %}
+    document.addEventListener('htmx:afterSwap', function(e) {
+        if (e.target && e.target.id === 'totpSection') {
+            startTotpTicker();
+            refreshTotp();
+        }
+    });
 </script>
 {% endblock %}

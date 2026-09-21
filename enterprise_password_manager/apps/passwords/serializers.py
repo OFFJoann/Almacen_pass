@@ -39,6 +39,7 @@ class PasswordEntryListSerializer(serializers.ModelSerializer):
     shared_by_email = serializers.SerializerMethodField()
     permission = serializers.SerializerMethodField()
     has_totp = serializers.SerializerMethodField()
+    totp = serializers.SerializerMethodField()
 
     class Meta:
         model = PasswordEntry
@@ -47,11 +48,14 @@ class PasswordEntryListSerializer(serializers.ModelSerializer):
             'sensitivity', 'is_favorite', 'is_deleted',
             'last_accessed', 'access_count', 'version',
             'expires_at', 'created_at', 'updated_at',
-            'shared_by_email', 'permission', 'has_totp',
+            'shared_by_email', 'permission', 'has_totp', 'totp',
         ]
 
     def get_has_totp(self, obj):
         return obj.has_totp
+
+    def get_totp(self, obj):
+        return obj.get_current_totp() or ''
 
     def get_shared_by_email(self, obj):
         share = Share.objects.filter(entry=obj, is_revoked=False).filter(

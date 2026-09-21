@@ -22,6 +22,10 @@
     document.documentElement.appendChild(style);
   }
 
+  function notifyFailed(reason) {
+    chrome.runtime.sendMessage({ type: 'qrFailed', reason }).catch(() => {});
+  }
+
   function showToast(text, ok) {
     const t = document.createElement('div');
     t.className = 'ticolvide-qr-toast';
@@ -186,8 +190,10 @@
             const imageData = ctx.getImageData(0, 0, cw, ch);
             const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
             if (result && result.data) { finish(result.data); return; }
+            notifyFailed('No se detectó un código QR válido en la selección.');
             showToast('No se detectó un código QR en la selección. Intenta de nuevo.', false);
           } catch (e) {
+            notifyFailed('Error al leer el código QR.');
             showToast('Error al leer el código QR.', false);
           }
           cleanup();
@@ -204,6 +210,7 @@
   async function finish(text) {
     const secret = parseSecret(text);
     if (!secret) {
+      notifyFailed('El código QR seleccionado no contiene una clave 2FA válida.');
       showToast('El código seleccionado no contiene una clave 2FA válida.', false);
       cleanup();
       return;

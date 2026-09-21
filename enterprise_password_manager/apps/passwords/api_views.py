@@ -6,7 +6,10 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.response import Response
 from django.db.models import Q
 from django.utils import timezone
-from .models import PasswordEntry, PasswordHistory, Folder, Category, Tag, Vault, Share
+from django.urls import reverse
+from datetime import timedelta
+import secrets
+from .models import PasswordEntry, PasswordHistory, Folder, Category, Tag, Vault, Share, SharedPassword
 from .serializers import (
     PasswordEntrySerializer, PasswordEntryListSerializer,
     FolderSerializer, CategorySerializer, TagSerializer,
@@ -125,6 +128,45 @@ class PasswordEntryViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('No tienes permiso para eliminar este registro compartido.')
         instance.delete()
 
+    @action(detail=False, methods=['post'], url_path='check_duplicate')
+    def check_duplicate(self, request):
+        from urllib.parse import urlsplit
+        url = (request.data.get('url') or '').strip()
+        username = ((request.data.get('username') or '')).strip().lower()
+        password = request.data.get('password') or ''
+        if not url or not password:
+            return Response({'duplicate': False})
+
+        def norm(u):
+            try:
+                parts = urlsplit(u)
+                return (parts.hostname or '').replace('www.', '').lower(), parts.path.rstrip('/').lower()
+            except Exception:
+                return u.lower(), ''
+
+        want_host, want_path = norm(url)
+        if not want_host:
+            return Response({'duplicate': False})
+
+        for entry in self.get_queryset().iterator():
+            cur = (entry.url or '')
+            if not cur:
+                continue
+            host, path = norm(cur)
+            if not host:
+                continue
+            # Mismo origen + mismo camino (tolerante a www, barra final, query/fragmento)
+            # o bien mismo hostname (mismo sitio) con las mismas credenciales.
+            same_page = host == want_host and path == want_path
+            same_site = host == want_host
+            if not (same_page or same_site):
+                continue
+            if username and (entry.get_username() or '').strip().lower() != username:
+                continue
+            if entry.get_password() == password:
+                return Response({'duplicate': True})
+        return Response({'duplicate': False})
+
 
 class FolderViewSet(viewsets.ModelViewSet):
     serializer_class = FolderSerializer
@@ -181,3 +223,65 @@ def api_generate_password(request):
     entropy = calculate_entropy(password)
 
     return Response({'password': password, 'entropy': entropy})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_share_password(request):
+    """Crea una contraseña compartida por enlace público temporal (máx. 7 días)
+    vía API (TokenAuthentication), igual que el modal de la web."""
+    password = (request.data.get('password') or '').strip()
+    if not password:
+        return Response(
+            {'status': 'error', 'message': 'Ingresa la contraseña que deseas compartir.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(password) > 4096:
+        return Response(
+            {'status': 'error', 'message': 'La contraseña es demasiado larga (máx. 4096 caracteres).'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        days = int(request.data.get('days') or '7')
+    except (TypeError, ValueError):
+        days = 7
+    days = max(1, min(days, 7))
+
+    max_uses_raw = str(request.data.get('max_uses') or '').strip()
+    max_uses = 7
+    if max_uses_raw:
+        try:
+            max_uses = int(max_uses_raw)
+        except (TypeError, ValueError):
+            max_uses = 7
+        max_uses = max(1, min(max_uses, 7))
+
+    share = SharedPassword.objects.create(
+        token=secrets.token_urlsafe(32),
+        created_by=request.user,
+        days=days,
+        max_uses=max_uses,
+        expires_at=timezone.now() + timedelta(days=days),
+    )
+    share.set_password(password)
+    share.save(update_fields=['password_encrypted', 'password_nonce', 'password_salt'])
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='PASSWORD_SHARED',
+        details=f'Created public share for a pasted password ({days} days, max {max_uses} uses)',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+
+    url = request.build_absolute_uri(reverse('public_link', kwargs={'token': share.token}))
+    return Response({
+        'status': 'ok',
+        'url': url,
+        'pk': str(share.pk),
+        'days': days,
+        'max_uses': max_uses,
+        'expires_at': share.expires_at.strftime('%d/%m/%Y %H:%M'),
+    })

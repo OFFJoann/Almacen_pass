@@ -1,7 +1,8 @@
+{% load static %}
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <a href="{% url 'passwords:vault' %}" class="text-decoration-none">
-            <i class="bi bi-shield-lock-fill"></i>
+            <img src="{% static 'img/logo.png' %}" alt="TICO BOX" class="sidebar-logo">
             <span class="sidebar-text">TICO BOX</span>
         </a>
         <button class="btn btn-sm btn-outline-secondary d-lg-none" onclick="toggleSidebar()">

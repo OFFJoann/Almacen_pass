@@ -26,9 +26,9 @@
                 <div class="progress-bar bg-secondary" id="totpProgress" role="progressbar" style="width: 100%"></div>
             </div>
         {% else %}
-            <p class="text-muted mb-3">Añade 2FA escaneando el QR de tu servicio (Cloudflare, Google, GitHub, etc.)</p>
+            <p class="text-muted mb-3">Añade 2FA con la clave manual de tu servicio (Cloudflare, Google, GitHub, etc.)</p>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTotpModal">
-                <i class="bi bi-qr-code-scan"></i> Añadir 2FA
+                <i class="bi bi-key"></i> Añadir 2FA
             </button>
         {% endif %}
     </div>
@@ -43,46 +43,16 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <ul class="nav nav-tabs mb-3" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="scan-tab" data-bs-toggle="tab" data-bs-target="#scanTab" type="button" role="tab">
-                            <i class="bi bi-camera"></i> Escanear QR
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manualTab" type="button" role="tab">
-                            <i class="bi bi-keyboard"></i> Clave manual
-                        </button>
-                    </li>
-                </ul>
-                <div class="tab-content">
-                    <div class="tab-pane fade show active" id="scanTab" role="tabpanel">
-                        <p class="small text-muted">Sube una captura de pantalla del código QR que te mostró el servicio</p>
-                        <div class="mb-3">
-                            <input type="file" class="form-control" id="qrImageInput" accept="image/*" capture="environment">
-                        </div>
-                        <canvas id="qrCanvas" class="d-none"></canvas>
-                        <div id="qrPreview" class="text-center mb-3"></div>
-                        <div id="qrError" class="alert alert-danger d-none small"></div>
-                        <div id="qrSecret" class="d-none">
-                            <div class="alert alert-success small" id="qrDecodedInfo"></div>
-                            <button class="btn btn-primary w-100" id="saveQrTotpBtn">
-                                <i class="bi bi-check-lg"></i> Guardar 2FA
-                            </button>
-                        </div>
+                <h6 class="mb-3"><i class="bi bi-keyboard"></i> Clave manual</h6>
+                <p class="small text-muted">Ingresa manualmente la clave secreta que te proporcionó el servicio</p>
+                <form id="manualTotpForm" hx-post="{% url 'passwords:totp_generate' entry.pk %}" hx-target="#totpSection" hx-swap="outerHTML">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Clave secreta</label>
+                        <input type="text" class="form-control font-monospace" name="secret" placeholder="ej: JBSWY3DPEHPK3PXP" required>
                     </div>
-                    <div class="tab-pane fade" id="manualTab" role="tabpanel">
-                        <p class="small text-muted">Ingresa manualmente la clave secreta que te proporcionó el servicio</p>
-                        <form id="manualTotpForm" hx-post="{% url 'passwords:totp_generate' entry.pk %}" hx-target="#totpSection" hx-swap="outerHTML">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label class="form-label">Clave secreta</label>
-                                <input type="text" class="form-control font-monospace" name="secret" placeholder="ej: JBSWY3DPEHPK3PXP" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Guardar 2FA</button>
-                        </form>
-                    </div>
-                </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Guardar 2FA</button>
+                </form>
             </div>
         </div>
     </div>

@@ -76,6 +76,53 @@
     return true;
   }
 
+  // Envía el formulario tras el autocompletado, usando fallbacks para sitios
+  // que no disparan submit con form.submit() (SPA, listeners JS, etc.).
+  // Se aplaza un poco para que los frameworks registren los eventos input/change.
+  function autoSubmitForm() {
+    setTimeout(submitFormNow, 150);
+  }
+
+  function submitFormNow() {
+    const pwd = lastPasswordInput || findPasswordInputs()[0];
+    if (!pwd) return;
+    const form = pwd.closest('form');
+    if (form) {
+      const btn = findSubmitButton(form);
+      if (btn) {
+        try { btn.click(); return; } catch (e) { /* fallback */ }
+      }
+      if (typeof form.requestSubmit === 'function') {
+        try { form.requestSubmit(); return; } catch (e) { /* fallback */ }
+      }
+      try { form.submit(); } catch (e) { /* ignore */ }
+      return;
+    }
+    // Sin <form>: busca un botón login/ingresar/enviar cercano al campo de contraseña.
+    let scope = pwd.parentElement;
+    for (let i = 0; i < 5 && scope; i++) {
+      if (scope.tagName === 'FORM') break;
+      scope = scope.parentElement;
+    }
+    const btn = scope
+      ? scope.querySelector('button[type="submit"], input[type="submit"], button[type="button"]')
+      : null;
+    if (btn) { try { btn.click(); } catch (e) { /* ignore */ } }
+  }
+
+  function findSubmitButton(form) {
+    const exact = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (exact) return exact;
+    const hay = form.querySelectorAll('button');
+    for (const b of hay) {
+      if (b.type === 'button' || b.type === 'submit') {
+        const t = ((b.textContent || '') + ' ' + (b.title || '') + ' ' + (b.getAttribute('aria-label') || '')).toLowerCase();
+        if (/login|sign[ -]?in|ingresar|entrar|iniciar|enviar|acceder|log[ -]?in|submit/.test(t)) return b;
+      }
+    }
+    return null;
+  }
+
   // ---------- Widget flotante ----------
   function ensureWidget() {
     if (widget) return widget;
@@ -149,6 +196,7 @@
               const d = await chrome.runtime.sendMessage({ type: 'getEntry', id: entry.id });
               if (!d || !d.ok) throw new Error('Error');
               fillFields(d.entry.username || '', d.entry.password || '');
+              autoSubmitForm();
             } catch (e) {
               list.hidden = false;
               list.innerHTML = '<div class="ticolvide-err">No se pudo completar el autocompletado.</div>';
@@ -206,6 +254,7 @@
     if (msg.type === 'ping') { sendResponse({ ok: true }); return; }
     if (msg.type === 'fill') {
       const ok = fillFields(msg.username, msg.password, msg.totp);
+      if (ok) autoSubmitForm();
       sendResponse({ ok });
       return;
     }

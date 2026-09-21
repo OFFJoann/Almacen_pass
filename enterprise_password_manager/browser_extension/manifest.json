@@ -3,7 +3,7 @@
   "name": "TICO BOX - Gestor de Contraseñas",
   "version": "1.0.0",
   "description": "Extensión oficial de TICO BOX. Autocompleta, guarda y genera contraseñas desde tu navegador.",
-  "permissions": ["storage", "tabs", "scripting", "activeTab", "cookies", "notifications", "alarms"],
+  "permissions": ["storage", "tabs", "scripting", "activeTab", "cookies", "notifications", "alarms", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -12,16 +12,16 @@
     "default_popup": "popup/popup.html",
     "default_title": "TICO BOX",
     "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "16": "icons/icon_conectado_16.png",
+      "48": "icons/icon_conectado_48.png",
+      "128": "icons/icon_conectado_128.png"
     }
   },
   "options_page": "options/options.html",
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "icons/icon_conectado_16.png",
+    "48": "icons/icon_conectado_48.png",
+    "128": "icons/icon_conectado_128.png"
   },
   "content_scripts": [
     {

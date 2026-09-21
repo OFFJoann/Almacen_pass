@@ -1,6 +1,6 @@
 // TICO BOX - background (service worker MV3)
-const DEFAULT_SERVER_URL = 'http://localhost:8080';
-const LEGACY_DEFAULT_SERVER_URL = 'http://localhost:8080';
+const DEFAULT_SERVER_URL = 'https://ticobox.sociabpo.com';
+const LEGACY_DEFAULT_SERVER_URL = 'https://ticobox.sociabpo.com';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.get(['serverUrl']).then((s) => {
@@ -10,10 +10,61 @@ chrome.runtime.onInstalled.addListener(() => {
       chrome.storage.sync.set({ serverUrl: url });
     }
   });
+  updateStateIconFromStorage();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  updateStateIconFromStorage();
 });
 
 function getServerUrl() {
   return chrome.storage.sync.get(['serverUrl']).then((s) => s.serverUrl || DEFAULT_SERVER_URL);
+}
+
+// ---------- Icono de estado conectado/desconectado ----------
+// El usuario coloca dos imágenes en icons/: icon_conectado.png y icon_desconectado.png
+// (o variantes por tamaño: icon_<estado>_16.png / _48 / _128.png).
+// Si no existen, se conserva el icono por defecto del manifest.
+const STATE_ICON_PREFIX = {
+  on: 'icons/icon_conectado',
+  off: 'icons/icon_desconectado',
+};
+const DEFAULT_ACTION_ICON = {
+  '16': 'icons/icon_conectado_16.png',
+  '48': 'icons/icon_conectado_48.png',
+  '128': 'icons/icon_conectado_128.png',
+};
+
+async function resourceExists(path) {
+  try {
+    const r = await fetch(chrome.runtime.getURL(path));
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function applyStateIcon(loggedIn) {
+  const prefix = STATE_ICON_PREFIX[loggedIn ? 'on' : 'off'];
+  // Prioriza variantes por tamaño (16/48/128) que Chrome necesita para la toolbar
+  const dict = {};
+  for (const size of ['16', '48', '128']) {
+    if (await resourceExists(prefix + '_' + size + '.png')) dict[size] = prefix + '_' + size + '.png';
+  }
+  let selected = null;
+  if (Object.keys(dict).length) {
+    selected = dict;
+  } else if (await resourceExists(prefix + '.png')) {
+    selected = prefix + '.png';
+  }
+  try {
+    await chrome.action.setIcon({ path: selected || DEFAULT_ACTION_ICON });
+  } catch (e) { /* ignore */ }
+}
+
+async function updateStateIconFromStorage() {
+  const s = await chrome.storage.local.get(['token']);
+  await applyStateIcon(!!s.token);
 }
 
 function apiBase() {
@@ -23,6 +74,19 @@ function apiBase() {
 async function getToken() {
   const s = await chrome.storage.local.get(['token']);
   return s.token || null;
+}
+
+function extractFieldError(data) {
+  if (!data || typeof data !== 'object') return '';
+  for (const key of Object.keys(data)) {
+    const v = data[key];
+    if (Array.isArray(v) && v.length) return key + ': ' + v[0];
+    if (typeof v === 'object' && v !== null) {
+      const nested = extractFieldError(v);
+      if (nested) return nested;
+    }
+  }
+  return '';
 }
 
 async function request(path, { method = 'GET', body = null, auth = true, headers = {} } = {}) {
@@ -50,7 +114,7 @@ async function request(path, { method = 'GET', body = null, auth = true, headers
     if (res.status === 401 && auth) {
       await chrome.storage.local.remove(['token', 'email', 'full_name', 'sessionId']);
     }
-    const err = new Error(data.error || data.detail || 'Error ' + res.status + ' del servidor');
+    const err = new Error(data.error || data.detail || extractFieldError(data) || 'Error ' + res.status + ' del servidor');
     err.status = res.status;
     throw err;
   }
@@ -114,6 +178,7 @@ async function sessionLogin() {
       full_name: data.full_name,
       sessionId: cookie.value,
     });
+    await applyStateIcon(true);
     return { ok: true, email: data.email };
   }
   return { ok: false };
@@ -126,6 +191,7 @@ async function doLogout() {
   try { await request('/auth/token/logout/', { method: 'POST', headers }); } catch (e) { /* ignore */ }
   await chrome.storage.local.remove(['token', 'email', 'full_name', 'sessionId']);
   await chrome.action.setBadgeText({ text: '' });
+  await applyStateIcon(false);
   try { chrome.runtime.sendMessage({ type: 'sessionChanged', loggedIn: false }); } catch (e) { /* ignore */ }
   return { ok: true };
 }
@@ -133,34 +199,43 @@ async function doLogout() {
 async function getStatus() {
   const s = await chrome.storage.local.get(['token', 'email', 'full_name']);
   const serverUrl = await getServerUrl();
+  let result;
   if (!s.token) {
     try {
       const login = await sessionLogin();
-      if (login.ok) return { ok: true, loggedIn: true, email: login.email, serverUrl };
+      if (login.ok) result = { ok: true, loggedIn: true, email: login.email, serverUrl };
+      else result = { ok: true, loggedIn: false, serverUrl };
     } catch (e) {
-      return { ok: true, loggedIn: false, serverError: e.message, serverUrl };
+      result = { ok: true, loggedIn: false, serverError: e.message, serverUrl };
     }
-    return { ok: true, loggedIn: false, serverUrl };
-  }
-  // Valida que el token siga vigente en el servidor (el logout web lo revoca).
-  try {
-    await request('/auth/me/', { auth: true });
-    return { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl };
-  } catch (e) {
-    if (e.status === 401) {
-      return { ok: true, loggedIn: false, serverUrl };
+  } else {
+    // Valida que el token siga vigente en el servidor (el logout web lo revoca).
+    try {
+      await request('/auth/me/', { auth: true });
+      result = { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl };
+    } catch (e) {
+      if (e.status === 401) {
+        result = { ok: true, loggedIn: false, serverUrl };
+      } else {
+        result = { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl, serverError: e.message };
+      }
     }
-    return { ok: true, loggedIn: true, email: s.email, fullName: s.full_name, serverUrl, serverError: e.message };
   }
+  await applyStateIcon(!!result.loggedIn);
+  return result;
 }
 
 // Comprueba periódicamente si la sesión web/token sigue vigente para
 // cerrar sesión en la extensión cuando se cierra en la aplicación web.
 async function checkSession() {
   const s = await chrome.storage.local.get(['token']);
-  if (!s.token) return;
+  if (!s.token) {
+    await applyStateIcon(false);
+    return;
+  }
   try {
     await request('/auth/me/', { auth: true });
+    await applyStateIcon(true);
   } catch (e) {
     if (e.status === 401) {
       await doLogout();
@@ -188,10 +263,8 @@ async function getEntry(id) {
   return { ok: true, entry: data };
 }
 
-async function saveEntry(entry, hostname) {
-  // Si ya existe un acceso con la misma URL y usuario, se actualiza en lugar de duplicar.
-  const all = await fetchAllEntries();
-  const sameUrl = all.find((e) => e.url && e.url.split('?')[0] === (entry.url || '').split('?')[0]);
+async function saveEntry(entry, hostname, options) {
+  const opts = options || {};
   const body = {
     name: entry.name,
     url: entry.url,
@@ -199,9 +272,15 @@ async function saveEntry(entry, hostname) {
     password: entry.password,
     notes: entry.notes || '',
   };
-  if (sameUrl) {
-    const data = await request('/passwords/entries/' + sameUrl.id + '/', { method: 'PATCH', body });
-    return { ok: true, updated: true, entry: data };
+  // El guardado automático (detección en páginas) fusiona con la misma URL; el
+  // "Añadir acceso" manual siempre crea un registro nuevo.
+  if (opts.mergeByUrl) {
+    const all = await fetchAllEntries();
+    const sameUrl = all.find((e) => e.url && e.url.split('?')[0] === (entry.url || '').split('?')[0]);
+    if (sameUrl) {
+      const data = await request('/passwords/entries/' + sameUrl.id + '/', { method: 'PATCH', body });
+      return { ok: true, updated: true, entry: data };
+    }
   }
   const data = await request('/passwords/entries/', { method: 'POST', body });
   return { ok: true, updated: false, entry: data };
@@ -218,6 +297,49 @@ async function setTotp(id, secret, code) {
 async function removeTotp(id) {
   const data = await request('/passwords/entries/' + id + '/remove_totp/', { method: 'POST' });
   return { ok: true, entry: data };
+}
+
+// ---------- Cálculo TOTP (WebCrypto HMAC-SHA1) ----------
+async function base32Decode(secret) {
+  const b32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const ch of (secret || '').toUpperCase()) {
+    const v = b32.indexOf(ch);
+    if (v < 0) return null;
+    bits += v.toString(2).padStart(5, '0');
+  }
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  }
+  if (!bytes.length) return null;
+  return new Uint8Array(bytes);
+}
+
+async function totpCodeFor(secret, counter) {
+  const key = await base32Decode(secret);
+  if (!key || !(crypto && crypto.subtle)) return null;
+  const msg = new ArrayBuffer(8);
+  new DataView(msg).setUint32(0, Math.floor(counter / 4294967296));
+  new DataView(msg).setUint32(4, counter >>> 0);
+  const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msg);
+  const hmac = new Uint8Array(sig);
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const bin = ((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16) | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff);
+  return String(bin % 1000000).padStart(6, '0');
+}
+
+async function generateCurrentTotp(secret) {
+  const step = 30;
+  const now = Math.floor(Date.now() / 1000);
+  for (let i = -1; i <= 1; i++) {
+    const code = await totpCodeFor(secret, Math.floor(now / step) + i);
+    if (code !== null) {
+      return { ok: true, code, valid: i === 0 };
+    }
+  }
+  return { ok: false, error: 'No se pudo calcular el código 2FA del secreto.' };
 }
 
 // ---------- Selección de código QR para 2FA ----------
@@ -245,9 +367,12 @@ async function startQrSelection(entryId, tabId) {
   await sessionSet({ pendingQrEntryId: entryId });
   let injected = false;
   try {
-    await chrome.tabs.sendMessage(tabId, { type: 'qrPing' });
-    injected = true;
+    const res = await chrome.tabs.sendMessage(tabId, { type: 'qrPing' });
+    injected = !!(res && res.ok);
   } catch (e) {
+    injected = false;
+  }
+  if (!injected) {
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['lib/jsqr.min.js', 'content/qrselect.js'],
@@ -267,6 +392,23 @@ async function applyQrSecret(secret) {
   return { ok: true, pending: true, secret };
 }
 
+// Configura el 2FA automáticamente con el secreto escaneado, calculando el código localmente.
+async function autoSetupTotp(entryId) {
+  const s = await sessionGet(['pendingQrSecret', 'pendingQrEntryId']);
+  if (!s.pendingQrSecret || s.pendingQrEntryId !== entryId) {
+    throw new Error('No hay un QR pendiente para esta entrada.');
+  }
+  const secret = s.pendingQrSecret;
+  const gen = await generateCurrentTotp(secret);
+  if (!gen.ok) throw new Error(gen.error);
+  const data = await request('/passwords/entries/' + entryId + '/verify_totp/', {
+    method: 'POST',
+    body: { secret, code: gen.code },
+  });
+  await clearPendingQr();
+  return { ok: true, entry: data, code: gen.code };
+}
+
 async function getPendingQr() {
   const s = await sessionGet(['pendingQrSecret', 'pendingQrEntryId']);
   if (s.pendingQrSecret && s.pendingQrEntryId) {
@@ -280,7 +422,57 @@ async function clearPendingQr() {
   return { ok: true };
 }
 
+async function setQrError(reason) {
+  await sessionSet({ pendingQrError: reason || 'El código QR no es válido.' });
+  return { ok: true };
+}
+
+async function getQrError() {
+  const s = await sessionGet(['pendingQrError']);
+  if (s.pendingQrError) return { ok: true, error: s.pendingQrError };
+  return { ok: true, error: null };
+}
+
+async function clearQrError() {
+  await sessionRemove(['pendingQrError']);
+  return { ok: true };
+}
+
 // ---------- Guardado detectado ----------
+// Detecta si ya hay un acceso guardado con el mismo sitio/host, el mismo
+// usuario y la misma contraseña. Primero intenta el endpoint del servidor; si
+// no está disponible (servidor sin actualizar), compara en el cliente
+// consultando cada candidato del mismo hostname.
+async function isDuplicateCredentials(data) {
+  const wantHost = hostOf(data.url).replace(/^www\./, '').toLowerCase();
+  const username = (data.username || '').trim().toLowerCase();
+  const password = data.password || '';
+  if (!wantHost || !password) return false;
+
+  try {
+    const res = await request('/passwords/entries/check_duplicate/', {
+      method: 'POST',
+      body: { url: data.url, username: data.username, password: data.password },
+    });
+    if (res && typeof res.duplicate === 'boolean') return res.duplicate;
+  } catch (e) { /* endpoint no disponible: seguir con la comprobación local */ }
+
+  try {
+    const all = await fetchAllEntries();
+    for (const e of all) {
+      const host = hostOf(e.url).replace(/^www\./, '').toLowerCase();
+      if (!host || host !== wantHost) continue;
+      let detail;
+      try { detail = await getEntry(e.id); } catch (err) { continue; }
+      const entry = detail && detail.entry;
+      if (!entry) continue;
+      if (username && (entry.username || '').trim().toLowerCase() !== username) continue;
+      if ((entry.password || '') === password) return true;
+    }
+  } catch (e) { /* si falla, se sigue preguntando */ }
+  return false;
+}
+
 async function saveDetected(tabId, data) {
   if (!tabId) return { ok: true };
 
@@ -305,18 +497,10 @@ async function saveDetected(tabId, data) {
     return { ok: true };
   }
 
-  // Si ya existe un acceso con la misma URL y el mismo usuario, no preguntar.
-  const username = (data.username || '').trim().toLowerCase();
-  const urlKey = (data.url || '').split('?')[0];
-  if (username && urlKey) {
-    try {
-      const all = await fetchAllEntries();
-      const dup = all.find((e) =>
-        (e.url || '').split('?')[0] === urlKey &&
-        (e.username || '').trim().toLowerCase() === username
-      );
-      if (dup) return { ok: true, skipped: true };
-    } catch (e) { /* si falla la consulta, se sigue preguntando */ }
+  // Si ya existe un acceso con la misma URL/sitio, el mismo usuario y la misma
+  // contraseña, no preguntar.
+  if ((data.url || '').trim() && (data.password || '')) {
+    if (await isDuplicateCredentials(data)) return { ok: true, skipped: true };
   }
 
   await chrome.storage.local.set({ pendingSave: { tabId, ...data } });
@@ -332,7 +516,7 @@ async function showSaveNotification(tabId, data) {
     const notifId = SAVE_NOTIF_PREFIX + tabId;
     await chrome.notifications.create(notifId, {
       type: 'basic',
-      iconUrl: 'icons/icon128.png',
+      iconUrl: 'icons/icon_conectado_128.png',
       title: 'TICO BOX',
       message: '¿Guardar la contraseña de ' + (data.name || data.hostname || 'este sitio') + '?',
       buttons: [
@@ -366,7 +550,7 @@ chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) =>
             username: p.username,
             password: p.password,
             notes: p.notes || '',
-          }, p.hostname);
+          }, p.hostname, { mergeByUrl: true });
           await clearPendingSave(tabId);
         } catch (e2) { /* el error se verá al abrir la extensión */ }
       }
@@ -492,6 +676,21 @@ function localGenerate(opts = {}) {
   return out.join('');
 }
 
+async function sharePassword(data) {
+  const res = await request('/passwords/shared-passwords/', {
+    method: 'POST',
+    body: {
+      password: data.password,
+      days: data.days != null ? data.days : 7,
+      max_uses: data.maxUses != null ? data.maxUses : 7,
+    },
+  });
+  if (!res || res.status !== 'ok') {
+    throw new Error((res && res.message) || 'No se pudo generar el enlace.');
+  }
+  return { ok: true, url: res.url, days: res.days, max_uses: res.max_uses, expires_at: res.expires_at };
+}
+
 async function generatePassword(opts = {}) {
   try {
     const base = await apiBase();
@@ -540,14 +739,16 @@ async function handle(msg, sender) {
     case 'getStatus': return getStatus();
     case 'getEntries': return getEntries(msg.hostname);
     case 'getEntry': return getEntry(msg.id);
-    case 'saveEntry': return saveEntry(msg.entry, msg.hostname);
+    case 'saveEntry': return saveEntry(msg.entry, msg.hostname, msg.options);
     case 'setTotp': return setTotp(msg.id, msg.secret, msg.code);
     case 'removeTotp': return removeTotp(msg.id);
     case 'getPendingQr': return getPendingQr();
     case 'clearPendingQr': return clearPendingQr();
+    case 'autoSetupTotp': return autoSetupTotp(msg.id);
     case 'selectQrForTotp': {
       const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!active) throw new Error('No hay una pestaña activa.');
+      await clearQrError();
       return startQrSelection(msg.entryId, active.id);
     }
     case 'qrCapture': {
@@ -559,6 +760,9 @@ async function handle(msg, sender) {
       }
     }
     case 'qrDecoded': return applyQrSecret(msg.secret);
+    case 'qrFailed': return setQrError(msg.reason);
+    case 'getQrError': return getQrError();
+    case 'clearQrError': return clearQrError();
     case 'saveDetected': return saveDetected(tabId, msg.data);
     case 'getPendingSave': return getPendingSave(msg.tabId);
     case 'clearPendingSave': return clearPendingSave(msg.tabId);
@@ -567,9 +771,14 @@ async function handle(msg, sender) {
       if (msg.url && /^https?:/i.test(msg.url)) await chrome.tabs.create({ url: msg.url });
       return { ok: true };
     case 'generatePassword': return generatePassword(msg.opts || {});
+    case 'sharePassword': return sharePassword(msg.data || {});
     case 'testConnection': return testConnection();
     case 'getServerUrl': return { ok: true, serverUrl: await getServerUrl() };
     case 'setServerUrl': await chrome.storage.sync.set({ serverUrl: msg.serverUrl }); return { ok: true };
     default: throw new Error('Mensaje desconocido: ' + msg.type);
   }
 }
+
+// Aplica el icono de estado cada vez que el service worker se activa
+// (recarga de la extensión, nuevo arranque del worker, etc.).
+updateStateIconFromStorage();

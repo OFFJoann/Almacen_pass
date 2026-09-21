@@ -3,12 +3,61 @@ const $ = (id) => document.getElementById(id);
 
 let currentTab = null;
 let currentHostname = '';
-let activeTab = 'site';
+let activeTab = 'all';
 let matchedEntries = [];
 let allEntries = [];
+let listRings = [];
+let listRingsTimer = null;
+let theme = 'light';
+
+async function loadTheme() {
+  try {
+    const s = await chrome.storage.local.get('theme');
+    theme = s.theme || 'light';
+  } catch (e) { theme = 'light'; }
+  applyTheme();
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+}
+
+async function toggleTheme() {
+  theme = theme === 'light' ? 'dark' : 'light';
+  applyTheme();
+  try { await chrome.storage.local.set({ theme }); } catch (e) { /* ignore */ }
+}
 
 function send(msg) {
   return chrome.runtime.sendMessage(msg).catch((e) => ({ ok: false, error: e.message }));
+}
+
+async function copyToClipboard(text) {
+  if (!text) return false;
+  const legacy = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fallback */ }
+  return legacy();
 }
 
 function showView(name) {
@@ -28,6 +77,8 @@ async function getActiveTab() {
 
 // ---------- Inicialización ----------
 async function init() {
+  await loadTheme();
+  document.querySelectorAll('.theme-btn').forEach((b) => b.addEventListener('click', toggleTheme));
   currentTab = await getActiveTab();
   if (currentTab && currentTab.url && /^https?:/.test(currentTab.url)) {
     currentHostname = new URL(currentTab.url).hostname;
@@ -37,6 +88,13 @@ async function init() {
     $('userEmail').textContent = status.email;
     showView('main');
     await loadMain();
+    const qrErr = await send({ type: 'getQrError' });
+    if (qrErr.ok && qrErr.error) {
+      showQrError(qrErr.error);
+      await send({ type: 'clearQrError' });
+    }
+    await autoConfigurePendingQr();
+    if (!listRingsTimer) listRingsTimer = setInterval(tickListRings, 1000);
     return;
   }
   // Sin sesión detectada: redirige automáticamente a la página de inicio de sesión.
@@ -81,11 +139,12 @@ async function loadPending() {
 
 function renderList() {
   const q = $('searchInput').value.trim().toLowerCase();
-  const showingAll = activeTab === 'all' || !currentHostname;
+  const showingAll = activeTab === 'all';
   const base = showingAll ? allEntries : matchedEntries;
   const list = q ? base.filter((e) => (e.name || '').toLowerCase().includes(q) || (e.url || '').includes(q)) : base;
   const box = $('entriesList');
   box.innerHTML = '';
+  listRings = [];
   if (!list.length) {
     $('noEntries').textContent = showingAll ? 'Tu bóveda está vacía.' : 'No hay accesos para este sitio.';
     $('noEntries').hidden = false;
@@ -123,14 +182,93 @@ function renderList() {
     const acts = document.createElement('div');
     acts.className = 'acts';
 
-    const totpBtn = document.createElement('button');
-    totpBtn.className = 'icon-btn';
-    totpBtn.title = entry.has_totp ? 'Ver código 2FA' : 'Configurar 2FA';
-    totpBtn.innerHTML = entry.has_totp
-      ? '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="#1a237e" d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>'
-      : '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>';
-    totpBtn.addEventListener('click', () => openTotpPanel(entry.id, entry.name || entry.url || 'Acceso'));
-    acts.appendChild(totpBtn);
+    const isShared = !!entry.shared_by_email;
+
+    if (entry.has_totp) {
+      const ringBtn = document.createElement('button');
+      ringBtn.className = 'row-totp';
+      ringBtn.title = 'Ver código 2FA';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '18');
+      svg.setAttribute('height', '18');
+      svg.setAttribute('viewBox', '0 0 18 18');
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      bg.setAttribute('class', 'rt-bg');
+      bg.setAttribute('cx', '9');
+      bg.setAttribute('cy', '9');
+      bg.setAttribute('r', '7');
+      const fg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      fg.setAttribute('class', 'rt-fg');
+      fg.setAttribute('cx', '9');
+      fg.setAttribute('cy', '9');
+      fg.setAttribute('r', '7');
+      svg.appendChild(bg);
+      svg.appendChild(fg);
+      const ringWrap = document.createElement('span');
+      ringWrap.className = 'rt-ring';
+      ringWrap.appendChild(svg);
+      const code = document.createElement('span');
+      code.className = 'rt-code';
+      code.textContent = entry.totp || '';
+      ringBtn.appendChild(ringWrap);
+      ringBtn.appendChild(code);
+      acts.appendChild(ringBtn);
+      listRings.push({ id: entry.id, fg, deadline: (Math.floor(Date.now() / 1000 / 30) + 1) * 30 });
+
+      const actions = document.createElement('div');
+      actions.className = 'entry-totp-actions';
+      actions.hidden = true;
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'btn ghost small';
+      copyBtn.textContent = 'Copiar 2FA';
+      copyBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const res = await send({ type: 'getEntry', id: entry.id });
+        const text = (res.ok && res.entry && res.entry.totp) || code.textContent || '';
+        if (text && /^\d{6}$/.test(text)) {
+          const copied = await copyToClipboard(text);
+          copyBtn.textContent = copied ? '¡Copiado!' : 'No se pudo copiar';
+          setTimeout(() => { copyBtn.textContent = 'Copiar 2FA'; }, 1500);
+        } else {
+          copyBtn.textContent = 'Sin código';
+          setTimeout(() => { copyBtn.textContent = 'Copiar 2FA'; }, 1500);
+        }
+      });
+      actions.appendChild(copyBtn);
+
+      if (!isShared) {
+        const reconfBtn = document.createElement('button');
+        reconfBtn.className = 'btn ghost small';
+        reconfBtn.textContent = 'Re-configurar';
+        reconfBtn.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          setError('mainError', null);
+          const res = await send({ type: 'selectQrForTotp', entryId: entry.id });
+          if (res.ok) window.close();
+          else setError('mainError', res.error || 'No se pudo iniciar la selección del QR.');
+        });
+        actions.appendChild(reconfBtn);
+      }
+
+      ringBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        actions.hidden = !actions.hidden;
+      });
+      row.appendChild(actions);
+    } else if (!isShared) {
+      const totpBtn = document.createElement('button');
+      totpBtn.className = 'icon-btn';
+      totpBtn.title = 'Configurar 2FA';
+      totpBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>';
+      totpBtn.addEventListener('click', async () => {
+        setError('mainError', null);
+        const res = await send({ type: 'selectQrForTotp', entryId: entry.id });
+        if (res.ok) window.close();
+        else setError('mainError', res.error || 'No se pudo iniciar la selección del QR.');
+      });
+      acts.appendChild(totpBtn);
+    }
 
     const fillBtn = document.createElement('button');
     fillBtn.className = 'icon-btn';
@@ -151,7 +289,7 @@ function renderList() {
     copyUserBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.31 0-8 1.67-8 5v1h16v-1c0-3.33-4.69-5-8-5z"/></svg>';
     copyUserBtn.addEventListener('click', async () => {
       const res = await send({ type: 'getEntry', id: entry.id });
-      if (res.ok && res.entry.username) await navigator.clipboard.writeText(res.entry.username);
+      if (res.ok && res.entry.username) await copyToClipboard(res.entry.username);
       else setError('mainError', 'No hay usuario que copiar.');
     });
     acts.appendChild(copyUserBtn);
@@ -162,7 +300,7 @@ function renderList() {
     copyPwdBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3-9H9V6a3 3 0 0 1 6 0z"/></svg>';
     copyPwdBtn.addEventListener('click', async () => {
       const res = await send({ type: 'getEntry', id: entry.id });
-      if (res.ok && res.entry.password) await navigator.clipboard.writeText(res.entry.password);
+      if (res.ok && res.entry.password) await copyToClipboard(res.entry.password);
       else setError('mainError', 'No hay contraseña que copiar.');
     });
     acts.appendChild(copyPwdBtn);
@@ -232,6 +370,11 @@ $('newToggleBtn').addEventListener('click', () => {
   }
 });
 
+$('newCancelBtn').addEventListener('click', () => {
+  $('newForm').hidden = true;
+  $('newToggleBtn').textContent = '+ Añadir acceso';
+});
+
 $('generateBtn').addEventListener('click', async () => {
   const res = await send({ type: 'generatePassword', opts: { length: 20 } });
   if (res.ok) $('newPassword').value = res.password;
@@ -253,6 +396,10 @@ $('newForm').addEventListener('submit', async (ev) => {
 async function saveNew(entry) {
   setError('mainError', null);
   if (!entry.password) { setError('mainError', 'La contraseña no puede estar vacía.'); return; }
+  const url = (entry.url || '').trim();
+  if (url && !/^https?:\/\//i.test(url)) {
+    entry.url = 'https://' + url;
+  }
   const res = await send({ type: 'saveEntry', entry, hostname: currentHostname });
   if (res.ok) {
     $('pendingPassword').value = '';
@@ -319,9 +466,79 @@ $('genPassphrase').addEventListener('change', () => {
 
 $('genRegenBtn').addEventListener('click', refreshGenerator);
 
+function shareModalOpen(password) {
+  $('sharePassword').value = password || '';
+  $('shareDays').value = '7';
+  $('shareMaxUses').value = '7';
+  $('shareBody').hidden = false;
+  $('shareResult').hidden = true;
+  $('shareError').hidden = true;
+  $('shareModal').hidden = false;
+  $('sharePassword').focus();
+}
+
+function shareModalClose() {
+  $('shareModal').hidden = true;
+}
+
+function shareResetToBody() {
+  $('shareBody').hidden = false;
+  $('shareResult').hidden = true;
+  $('shareError').hidden = true;
+  $('shareGenBtn').disabled = false;
+  $('shareGenBtn').textContent = 'Generar enlace';
+}
+
+$('genShareBtn').addEventListener('click', () => {
+  shareModalOpen($('genOutput').value);
+});
+
+$('shareCloseBtn').addEventListener('click', shareModalClose);
+$('shareDoneBtn').addEventListener('click', shareModalClose);
+$('shareAnotherBtn').addEventListener('click', () => {
+  shareResetToBody();
+  $('sharePassword').value = $('genOutput').value;
+  $('sharePassword').focus();
+});
+
+$('shareGenBtn').addEventListener('click', async () => {
+  const password = $('sharePassword').value;
+  if (!password) { $('sharePassword').focus(); return; }
+  const days = Math.min(7, Math.max(1, parseInt($('shareDays').value, 10) || 7));
+  const maxUses = Math.min(7, Math.max(1, parseInt($('shareMaxUses').value, 10) || 7));
+  const btn = $('shareGenBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generando…';
+  setError('shareError', null);
+  const res = await send({ type: 'sharePassword', data: { password, days, maxUses } });
+  btn.disabled = false;
+  btn.textContent = 'Generar enlace';
+  if (res.ok && res.url) {
+    $('shareUrl').value = res.url;
+    $('shareResultDays').textContent = res.days;
+    $('shareResultUses').textContent = res.max_uses;
+    $('shareResultExpires').textContent = res.expires_at;
+    $('shareBody').hidden = true;
+    $('shareResult').hidden = false;
+  } else {
+    setError('shareError', res.error || 'No se pudo generar el enlace.');
+  }
+});
+
+$('shareCopyBtn').addEventListener('click', async () => {
+  const ok = await copyToClipboard($('shareUrl').value);
+  const btn = $('shareCopyBtn');
+  btn.innerHTML = ok
+    ? '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'
+    : $('shareCopyBtn').innerHTML;
+  setTimeout(() => {
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>';
+  }, 2000);
+});
+
 $('genCopyBtn').addEventListener('click', async () => {
   const val = $('genOutput').value;
-  if (val) await navigator.clipboard.writeText(val);
+  if (val) await copyToClipboard(val);
 });
 
 $('genUseBtn').addEventListener('click', () => {
@@ -334,11 +551,23 @@ $('genUseBtn').addEventListener('click', () => {
 // ---------- Panel 2FA ----------
 let totpEntryId = null;
 let totpTimer = null;
+let totpShared = false;
 
 function closeTotpPanel() {
   $('totpPanel').hidden = true;
+  $('totpRing').hidden = true;
   if (totpTimer) { clearInterval(totpTimer); totpTimer = null; }
   totpEntryId = null;
+  totpShared = false;
+  $('totpSecret').parentElement.hidden = false;
+  $('totpVerifyCode').parentElement.hidden = false;
+  $('totpSaveBtn').hidden = false;
+  $('totpQrBtn').hidden = false;
+}
+
+function showQrError(msg) {
+  $('errorModalMsg').textContent = msg;
+  $('errorModal').hidden = false;
 }
 
 async function refreshTotpPanel() {
@@ -347,35 +576,128 @@ async function refreshTotpPanel() {
   if (res.ok && res.entry) {
     const has = !!res.entry.has_totp;
     $('totpCode').textContent = has ? res.entry.totp || '—' : 'Sin 2FA configurado';
-    $('totpStatus').textContent = has
-      ? 'Código actual de 6 dígitos.'
-      : 'Introduce la clave secreta y el código de verificación de tu app.';
-    $('totpRemoveBtn').hidden = !has;
+    $('totpRing').hidden = !has;
+    if (!totpShared) {
+      $('totpStatus').textContent = has
+        ? 'Código actual de 6 dígitos.'
+        : 'Introduce la clave secreta y el código de verificación de tu app.';
+    } else if (!has) {
+      $('totpStatus').textContent = 'Registro compartido: el 2FA solo puede gestionarlo su propietario.';
+    }
+    $('totpRemoveBtn').hidden = !has || totpShared;
+    if (has) {
+      const step = 30;
+      const nowS = Math.floor(Date.now() / 1000);
+      if (!totpDeadline || totpDeadline <= nowS) totpDeadline = (Math.floor(nowS / step) + 1) * step;
+      updateTotpRing();
+    }
   }
 }
 
-async function openTotpPanel(entryId, name) {
+// Anillo de cuenta regresiva de 30s (volumen completo -> vacío como un reloj).
+// Al agotarse la ventana actual refresca el código desde el servidor.
+let totpDeadline = 0;
+function updateTotpRing() {
+  const arc = $('totpRingArc');
+  if (!arc) return;
+  const nowS = Math.floor(Date.now() / 1000);
+  const step = 30;
+  const remaining = totpDeadline - nowS;
+  const C = 75.4;
+  arc.style.strokeDashoffset = String(C * remaining / step);
+  if (remaining <= 0) {
+    totpDeadline = (Math.floor(nowS / step) + 1) * step;
+    refreshTotpPanel();
+  }
+}
+
+// Anillos de código en la lista de entradas: se vacían como un reloj y al agotarse la
+// ventana actual solo se actualizan los códigos desde el servidor (sin reabrir ningún panel).
+async function tickListRings() {
+  const step = 30;
+  const nowS = Math.floor(Date.now() / 1000);
+  let changed = false;
+  for (const ring of listRings) {
+    if (!ring.fg.isConnected) continue;
+    const remaining = ring.deadline - nowS;
+    const C = Math.round(2 * Math.PI * 7 * 100) / 100;
+    ring.fg.style.strokeDasharray = String(C);
+    ring.fg.style.strokeDashoffset = String(C * remaining / step);
+    if (remaining <= 0) {
+      ring.deadline = (Math.floor(nowS / step) + 1) * step;
+      changed = true;
+    }
+  }
+  if (changed) await loadEntriesSilently();
+}
+
+async function loadEntriesSilently() {
+  const res = await send({ type: 'getEntries', hostname: currentHostname });
+  if (!res.ok) return;
+  const pool = (res.all && res.all.length ? res.all : []).concat(res.matched || []);
+  for (const ring of listRings) {
+    const entry = pool.find((e) => String(e.id) === String(ring.id));
+    if (entry && ring.fg.isConnected) {
+      const codeEl = ring.fg.closest('.row-totp').querySelector('.rt-code');
+      if (codeEl) codeEl.textContent = entry.totp || '';
+    }
+  }
+}
+
+async function openTotpPanel(entryId, name, isShared) {
   totpEntryId = entryId;
   $('totpEntryName').textContent = name;
   $('totpSecret').value = '';
   $('totpVerifyCode').value = '';
   $('totpPanel').hidden = false;
+  $('totpRing').hidden = true;
+  totpShared = !!isShared;
+  $('totpSecret').parentElement.hidden = totpShared;
+  $('totpVerifyCode').parentElement.hidden = totpShared;
+  $('totpSaveBtn').hidden = totpShared;
+  $('totpQrBtn').hidden = totpShared;
+  if (totpShared) {
+    $('totpStatus').textContent = 'Registro compartido: el 2FA solo puede gestionarlo su propietario.';
+    $('totpRemoveBtn').hidden = true;
+  }
   const pending = await send({ type: 'getPendingQr' });
   if (pending.ok && pending.secret && pending.entryId === entryId) {
     $('totpSecret').value = pending.secret;
-    $('totpStatus').textContent = 'QR leído. Introduce el código de 6 dígitos de tu app para confirmar.';
+    $('totpStatus').textContent = 'QR leído. Verificando automáticamente…';
+    const auto = await send({ type: 'autoSetupTotp', id: entryId });
+    if (auto.ok) {
+      $('totpStatus').textContent = '2FA configurado correctamente.';
+      await refreshTotpPanel();
+      renderList();
+    } else {
+      $('totpStatus').textContent = 'QR leído, pero el código no coincidió. Reintenta o escribe el secreto y el código manualmente.';
+      showQrError(auto.error || 'El código 2FA no coincidió con el servidor.');
+    }
   }
   await refreshTotpPanel();
   if (totpTimer) clearInterval(totpTimer);
-  totpTimer = setInterval(refreshTotpPanel, 30000);
+  totpTimer = setInterval(updateTotpRing, 1000);
 }
 
 $('totpCloseBtn').addEventListener('click', closeTotpPanel);
 $('totpRefreshBtn').addEventListener('click', refreshTotpPanel);
 
+// Si al reabrir la extensión hay un QR escaneado sin configurar, lo configura en silencio
+// (sin abrir el módulo 2FA) y refresca la lista para que aparezca la bolita en la fila.
+async function autoConfigurePendingQr() {
+  const pending = await send({ type: 'getPendingQr' });
+  if (!pending.ok || !pending.secret || !pending.entryId) return;
+  const res = await send({ type: 'autoSetupTotp', id: pending.entryId });
+  if (res.ok) {
+    await loadMain();
+  } else {
+    showQrError(res.error || 'El código 2FA no coincidió con el servidor.');
+  }
+}
+
 $('totpCopyBtn').addEventListener('click', async () => {
   const code = $('totpCode').textContent;
-  if (code && /^\d{6}$/.test(code)) await navigator.clipboard.writeText(code);
+  if (code && /^\d{6}$/.test(code)) await copyToClipboard(code);
 });
 
 $('totpSaveBtn').addEventListener('click', async () => {
@@ -417,6 +739,11 @@ $('totpQrBtn').addEventListener('click', async () => {
   const res = await send({ type: 'selectQrForTotp', entryId: totpEntryId });
   if (res.ok) window.close();
   else setError('mainError', res.error || 'No se pudo iniciar la selección del QR.');
+});
+
+$('errorModalOk').addEventListener('click', () => {
+  $('errorModal').hidden = true;
+  send({ type: 'clearQrError' });
 });
 
 // ---------- Pestañas, búsqueda y opciones ----------
