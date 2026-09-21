@@ -1,5 +1,7 @@
 from .base import *
 
+import os
+import botocore
 from ..aws_secrets import get_secret
 
 DEBUG = False
@@ -22,7 +24,34 @@ SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
-_DB_SECRET = get_secret(config('AWS_DB_SECRET_ID', default='pd/ticobox/config'))
+
+def _load_db_secret():
+    """Lee el secreto de base de datos desde AWS Secrets Manager.
+
+    Si no hay credenciales AWS disponibles (por ejemplo durante el build de la
+    imagen, cuando collectstatic importa estos settings pero la máquina no
+    tiene credenciales), se cae a variables de entorno con sus valores por
+    defecto para no romper la construcción. En producción real las credenciales
+    AWS existen y siempre se usa el secreto.
+    """
+    try:
+        return get_secret(config('AWS_DB_SECRET_ID', default='pd/ticobox/config'))
+    except (
+        botocore.exceptions.NoCredentialsError,
+        botocore.exceptions.PartialCredentialsError,
+        botocore.exceptions.CredentialRetrievalError,
+        botocore.exceptions.TokenRetrievalError,
+    ):
+        return {
+            'dbname': config('DB_NAME', default='epm_db'),
+            'username': config('DB_USER', default='epm_user'),
+            'password': config('DB_PASSWORD', default='epm_password'),
+            'host': config('DB_HOST', default='db'),
+            'port': config('DB_PORT', default='5432'),
+        }
+
+
+_DB_SECRET = _load_db_secret()
 
 DATABASES = {
     'default': {
