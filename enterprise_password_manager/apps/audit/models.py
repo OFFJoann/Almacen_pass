@@ -39,6 +39,9 @@ class AuditLog(models.Model):
         ('IMPORT_VAULT', _('Importar bóveda')),
         ('DATABASE_BACKUP', _('Backup de base de datos')),
         ('DATABASE_RESTORE', _('Restauración de base de datos')),
+        ('ACCOUNT_UNLOCKED', _('Cuenta desbloqueada')),
+        ('SESSIONS_FORCE_CLOSED', _('Sesiones cerradas a la fuerza')),
+        ('PASSWORD_RESET_BY_ADMIN', _('Contraseña restablecida por administrador')),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

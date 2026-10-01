@@ -86,6 +86,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     def has_emergency_contact(self):
         return bool(self.emergency_contact_email.strip())
 
+    @property
+    def is_locally_locked(self):
+        """True si la cuenta quedó bloqueada por intentos fallidos de login local."""
+        return self.failed_local_attempts >= LOCAL_LOGIN_LOCK_LIMIT
+
+    @property
+    def active_session_count(self):
+        return self.active_sessions.count()
+
     def save(self, *args, **kwargs):
         self.is_staff = self.role in ('superadmin', 'admin_usuarios')
         if self.role == 'superadmin':

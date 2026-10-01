@@ -17,6 +17,40 @@ html {
     --sidebar-color: #adb5bd;
 }
 
+/* Bootstrap's bg-light / bg-primary-subtle keep light values in dark mode,
+   so headers and hints would stay white. Map them to theme-aware surfaces. */
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .bg-primary-subtle {
+    background-color: rgba(13, 110, 253, 0.15) !important;
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--bs-body-bg);
+}
+
+[data-bs-theme="dark"] .alert-info {
+    background-color: rgba(13, 202, 240, 0.12);
+    border-color: rgba(13, 202, 240, 0.3);
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .table {
+    --bs-table-bg: transparent;
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .modal-content,
+[data-bs-theme="dark"] .offcanvas,
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: var(--bs-body-bg);
@@ -208,7 +242,12 @@ body {
     position: fixed;
     z-index: 10001;
     border-radius: 0.5rem;
-    box-shadow: 0 0 0 4px #0d6efd, 0 0 0 100vmax rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    /* El spread del sombreado lo calcula el JS en px reales (--tour-spread).
+       No se usa 100vmax porque con html{zoom} las unidades vw/vmax se deforman
+       y el halo oscuro se queda corto, dejando media pantalla sin sombrear. */
+    box-shadow: 0 0 0 var(--tour-spread, 4000px) rgba(0, 0, 0, 0.6),
+                0 0 0 4px #0d6efd;
     transition: all 0.25s ease;
 }
 

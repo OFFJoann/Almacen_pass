@@ -1,17 +1,190 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Gestión de recursos compartidos{% endblock %}
+{% block title %}Compartidas{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0"><i class="bi bi-share"></i> Gestión de recursos compartidos</h4>
+        <div>
+            <h4 class="mb-0"><i class="bi bi-share"></i> Recursos compartidos</h4>
+            <small class="text-muted">Accesos que has otorgado y solicitudes de acceso</small>
+        </div>
         <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a la Bóveda</a>
     </div>
 
-    <div class="card shadow-sm mb-4">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Pendientes ({{ pending_requests|length }})</h6></div>
+    <div class="alert alert-info d-flex gap-2 mb-4" role="alert">
+        <i class="bi bi-info-circle-fill fs-5"></i>
+        <div>
+            <strong>Accesos otorgados</strong> = registros tuyos que ya compartiste con alguien.<br>
+            <strong>Solicitudes de acceso</strong> = otros usuarios te piden compartir uno de tus registros, o tú les pediste compartir uno de los tuyos.
+        </div>
+    </div>
+
+    {# ================= BLOQUE 1: LO QUE YO COMPARTÍ ================= #}
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <span class="badge bg-success fs-6"><i class="bi bi-check2-circle"></i></span>
+        <h5 class="mb-0">LO QUE YO HE COMPARTIDO</h5>
+        <small class="text-muted">Accesos ya otorgados por ti. Son definitivos: el otro usuario ya puede ver el registro.</small>
+    </div>
+
+    <div class="card shadow-sm mb-5 border-start border-4 border-success">
+        <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-box-arrow-up-right"></i> Contraseñas</h6>
+                <small class="text-muted">Contraseñas tuyas que has compartido con otros usuarios o grupos</small>
+            </div>
+            <span class="badge bg-primary">{{ my_shares_active|length }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if my_shares_active %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Registro</th><th>Compartido con</th><th>Permiso</th><th>Expira</th><th>Compartido el</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                    {% for share in my_shares_active %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'passwords:detail' share.entry.pk %}" class="text-decoration-none"><i class="bi bi-key"></i> {{ share.entry.name }}</a>
+                                {% if share.entry.is_obsolete %}<span class="badge bg-warning ms-1">Obsoleto</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if share.shared_with_user %}<i class="bi bi-person"></i> {{ share.shared_with_user.email }}
+                                {% elif share.shared_with_group %}<i class="bi bi-people"></i> {{ share.shared_with_group.name }} <span class="badge bg-secondary">Grupo</span>{% endif %}
+                            </td>
+                            <td><span class="badge bg-info">{{ share.get_permission_display }}</span></td>
+                            <td><small>{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d' }}{% else %}Sin expiración{% endif %}</small></td>
+                            <td><small>{{ share.created_at|date:'Y-m-d H:i' }}</small></td>
+                            <td class="text-nowrap">
+                                <a href="{% url 'passwords:detail' share.entry.pk %}" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>
+                                <form method="post" action="{% url 'passwords:revoke_share' share.pk %}" class="d-inline" onsubmit="return confirm('¿Revocar el acceso a {{ share.entry.name }}?')">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Revocar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3 mb-0">No has compartido ninguna contraseña todavía.</p>
+            {% endif %}
+
+            {% if my_shares_history %}
+            <div class="card-footer bg-transparent">
+                <button class="btn btn-sm btn-link p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#share-history-pw">
+                    <i class="bi bi-clock-history"></i> Historial de contraseñas ({{ my_shares_history|length }})
+                </button>
+                <div class="collapse mt-2" id="share-history-pw">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Registro</th><th>Compartido con</th><th>Estado</th><th>Expira</th><th>Compartido el</th></tr></thead>
+                            <tbody>
+                            {% for share in my_shares_history %}
+                                <tr>
+                                    <td>{{ share.entry.name }}</td>
+                                    <td>{% if share.shared_with_user %}{{ share.shared_with_user.email }}{% elif share.shared_with_group %}{{ share.shared_with_group.name }} (Grupo){% endif %}</td>
+                                    <td>{% if share.is_revoked %}<span class="badge bg-secondary">Revocada</span>{% elif share.is_expired %}<span class="badge bg-warning">Expirada</span>{% else %}<span class="badge bg-danger">Inactiva</span>{% endif %}</td>
+                                    <td><small>{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d' }}{% else %}-{% endif %}</small></td>
+                                    <td><small>{{ share.created_at|date:'Y-m-d H:i' }}</small></td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-start border-4 border-success">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-box-arrow-up-right"></i> Secretos</h6>
+                <small class="text-muted">Secretos tuyos que has compartido con otros usuarios o grupos</small>
+            </div>
+            <span class="badge bg-primary">{{ my_secret_shares_active|length }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if my_secret_shares_active %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Secreto</th><th>Tipo</th><th>Compartido con</th><th>Permiso</th><th>Expira</th><th>Compartido el</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                    {% for share in my_secret_shares_active %}
+                        <tr>
+                            <td><a href="{% url 'secrets:detail' share.secret.pk %}" class="text-decoration-none"><i class="bi bi-safe"></i> {{ share.secret.name }}</a></td>
+                            <td><span class="badge bg-secondary">{{ share.secret.get_type_display }}</span></td>
+                            <td>
+                                {% if share.shared_with_user %}<i class="bi bi-person"></i> {{ share.shared_with_user.email }}
+                                {% elif share.shared_with_group %}<i class="bi bi-people"></i> {{ share.shared_with_group.name }} <span class="badge bg-secondary">Grupo</span>{% endif %}
+                            </td>
+                            <td><span class="badge bg-info">{{ share.get_permission_display }}</span></td>
+                            <td><small>{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d' }}{% else %}Sin expiración{% endif %}</small></td>
+                            <td><small>{{ share.created_at|date:'Y-m-d H:i' }}</small></td>
+                            <td class="text-nowrap">
+                                <a href="{% url 'secrets:detail' share.secret.pk %}" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>
+                                <form method="post" action="{% url 'secrets:revoke_share' share.pk %}" class="d-inline" onsubmit="return confirm('¿Revocar el acceso a {{ share.secret.name }}?')">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Revocar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3 mb-0">No has compartido ningún secreto todavía.</p>
+            {% endif %}
+
+            {% if my_secret_shares_history %}
+            <div class="card-footer bg-transparent">
+                <button class="btn btn-sm btn-link p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#share-history-secret">
+                    <i class="bi bi-clock-history"></i> Historial de secretos ({{ my_secret_shares_history|length }})
+                </button>
+                <div class="collapse mt-2" id="share-history-secret">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Secreto</th><th>Compartido con</th><th>Estado</th><th>Expira</th><th>Compartido el</th></tr></thead>
+                            <tbody>
+                            {% for share in my_secret_shares_history %}
+                                <tr>
+                                    <td>{{ share.secret.name }}</td>
+                                    <td>{% if share.shared_with_user %}{{ share.shared_with_user.email }}{% elif share.shared_with_group %}{{ share.shared_with_group.name }} (Grupo){% endif %}</td>
+                                    <td>{% if share.is_revoked %}<span class="badge bg-secondary">Revocada</span>{% elif share.is_expired %}<span class="badge bg-warning">Expirada</span>{% else %}<span class="badge bg-danger">Inactiva</span>{% endif %}</td>
+                                    <td><small>{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d' }}{% else %}-{% endif %}</small></td>
+                                    <td><small>{{ share.created_at|date:'Y-m-d H:i' }}</small></td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <hr class="my-5">
+
+    {# ================= BLOQUE 2: SOLICITUDES ================= #}
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <span class="badge bg-warning text-dark fs-6"><i class="bi bi-hourglass-split"></i></span>
+        <h5 class="mb-0">SOLICITUDES DE ACCESO</h5>
+        <small class="text-muted">Peticiones. Aún no son accesos: alguien las está esperando o esperando por responder.</small>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-start border-4 border-warning">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-envelope-paper-fill"></i> Recibidas — tus registros</h6>
+                <small class="text-muted">Otros usuarios te piden uno de <strong>tus</strong> registros. Tú decides si lo das.</small>
+            </div>
+            <span class="badge bg-warning text-dark">{{ pending_requests|length }}</span>
+        </div>
         <div class="card-body p-0">
             {% if pending_requests %}
             <div class="table-responsive">
@@ -46,8 +219,13 @@
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Respondidas ({{ responded_requests|length }})</h6></div>
+    <div class="card shadow-sm mb-4 border-start border-4 border-warning">
+        <div class="card-header bg-light">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-clipboard-check-fill"></i> Recibidas — ya respondiste</h6>
+                <small class="text-muted">Solicitudes sobre tus registros que ya aprobaste o denegaste</small>
+            </div>
+        </div>
         <div class="card-body p-0">
             {% if responded_requests %}
             <div class="table-responsive">
@@ -77,8 +255,14 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mt-4">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-send"></i> Mis solicitudes enviadas ({{ my_requests|length }})</h6></div>
+    <div class="card shadow-sm mb-4 border-start border-4 border-warning">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-send-fill"></i> Enviadas — registros de otros</h6>
+                <small class="text-muted">Tú pediste registros de <strong>otros</strong> usuarios. Ellos deben aprobar.</small>
+            </div>
+            <span class="badge bg-warning text-dark">{{ my_requests|length }}</span>
+        </div>
         <div class="card-body p-0">
             {% if my_requests %}
             <div class="table-responsive">
@@ -103,7 +287,7 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-muted text-center py-3 mb-0">Aún no has enviado recursos compartidos.</p>
+            <p class="text-muted text-center py-3 mb-0">No has enviado ninguna solicitud.</p>
             {% endif %}
         </div>
     </div>

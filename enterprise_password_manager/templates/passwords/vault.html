@@ -809,7 +809,7 @@
             {
                 selector: '[data-tour="share-requests"]',
                 title: 'Compartidas',
-                text: 'Aquí gestionas las solicitudes para volver a compartir accesos contigo y las solicitudes pendientes de otros usuarios.',
+                text: 'Aquí ves todo lo que has compartido (contraseñas y secretos) y gestionas las solicitudes de acceso a tus registros.',
             },
             {
                 selector: '[data-tour="trash"]',
@@ -885,6 +885,7 @@
         });
 
         let current = 0;
+        let currentTarget = null;
         const overlay = document.createElement('div');
         overlay.className = 'onboarding-backdrop';
         const highlight = document.createElement('div');
@@ -905,6 +906,9 @@
             overlay.remove();
             highlight.remove();
             card.remove();
+            window.removeEventListener('resize', onResize);
+            if (repositionRaf) { cancelAnimationFrame(repositionRaf); }
+            currentTarget = null;
             fetch('{% url 'passwords:onboarding_complete' %}', {
                 method: 'POST',
                 headers: {
@@ -915,21 +919,89 @@
             }).catch(function () {});
         }
 
-        function position(target) {
-            const rect = target.getBoundingClientRect();
-            const pad = 8;
-            highlight.style.display = 'block';
-            highlight.style.left = (rect.left - pad) + 'px';
-            highlight.style.top = (rect.top - pad) + 'px';
-            highlight.style.width = (rect.width + pad * 2) + 'px';
-            highlight.style.height = (rect.height + pad * 2) + 'px';
+        // La pagina usa html{zoom: 0.70} (static/css/epm.css). Eso hace que
+        // getBoundingClientRect() devuelva px YA escalados, mientras que las
+        // coordenadas escritas en un position:fixed se vuelven a escalar por el
+        // zoom. Por eso todo se pasa a px de layout dividiendo entre z.
+        function pageZoom() {
+            const de = document.documentElement;
+            let z = parseFloat(window.getComputedStyle(de).zoom);
+            if (!z || isNaN(z) || z <= 0) {
+                // Alternativa: innerWidth (px de pantalla) / clientWidth (px de layout)
+                z = window.innerWidth / de.clientWidth;
+            }
+            return (z && !isNaN(z) && z > 0) ? z : 1;
+        }
 
-            card.style.left = '50%';
-            card.style.transform = 'translateX(-50%)';
-            const cardTop = rect.bottom + 16;
-            card.style.top = (cardTop + card.offsetHeight + 16 > window.innerHeight
-                ? Math.max(8, rect.top - card.offsetHeight - 16)
-                : cardTop) + 'px';
+        function centerCard() {
+            const z = pageZoom();
+            card.style.transform = 'none';
+            card.style.left = Math.max(8, (window.innerWidth / z - card.offsetWidth) / 2) + 'px';
+            card.style.top = Math.round((window.innerHeight / z) * 0.3) + 'px';
+        }
+
+        function position(target) {
+            const z = pageZoom();
+            const rect = target.getBoundingClientRect();
+            const vw = window.innerWidth / z;
+            const vh = window.innerHeight / z;
+            const left = rect.left / z;
+            const top = rect.top / z;
+            const width = rect.width / z;
+            const height = rect.height / z;
+            const bottom = top + height;
+
+            const pad = 8;
+            const gap = 16;
+            highlight.style.display = 'block';
+            highlight.style.left = (left - pad) + 'px';
+            highlight.style.top = (top - pad) + 'px';
+            highlight.style.width = (width + pad * 2) + 'px';
+            highlight.style.height = (height + pad * 2) + 'px';
+            // Halo oscuro en px de layout: cubre la pantalla entera sea cual sea el zoom.
+            highlight.style.setProperty('--tour-spread', Math.ceil(Math.max(vw, vh) * 1.2) + 'px');
+
+            // La tarjeta se centra sobre el elemento (no sobre la pantalla),
+            // y se voltea arriba/abajo segun el espacio disponible.
+            const cardW = card.offsetWidth;
+            const cardH = card.offsetHeight;
+            const cardLeft = Math.max(8, Math.min(vw - cardW - 8, left + width / 2 - cardW / 2));
+            let cardTop = bottom + gap;
+            if (cardTop + cardH + gap > vh) {
+                cardTop = top - cardH - gap;
+            }
+            cardTop = Math.max(gap, Math.min(cardTop, Math.max(gap, vh - cardH - gap)));
+
+            card.style.transform = 'none';
+            card.style.left = cardLeft + 'px';
+            card.style.top = cardTop + 'px';
+        }
+
+        // Reposiciona en cada frame hasta que el scroll se estabiliza: si se
+        // posiciona antes de que termine el scroll suave, el resaltado queda
+        // apuntando al lugar anterior.
+        let repositionRaf = null;
+        function watchPosition(target) {
+            currentTarget = target;
+            if (repositionRaf) { cancelAnimationFrame(repositionRaf); }
+            let lastY = null;
+            let stable = 0;
+            const tick = function () {
+                const y = window.scrollY;
+                stable = (y === lastY) ? stable + 1 : 0;
+                lastY = y;
+                if (currentTarget && document.body.contains(currentTarget)) {
+                    position(currentTarget);
+                }
+                if (stable < 4 && currentTarget) { repositionRaf = requestAnimationFrame(tick); }
+                else { repositionRaf = null; }
+            };
+            repositionRaf = requestAnimationFrame(tick);
+        }
+
+        function onResize() {
+            if (currentTarget && document.body.contains(currentTarget)) { position(currentTarget); }
+            else { centerCard(); }
         }
 
         function render() {
@@ -943,14 +1015,12 @@
 
             const target = step.selector ? document.querySelector(step.selector) : null;
             if (target) {
-                highlight.style.display = 'block';
-                position(target);
-                target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                watchPosition(target);
             } else {
+                currentTarget = null;
                 highlight.style.display = 'none';
-                card.style.left = '50%';
-                card.style.top = '30%';
-                card.style.transform = 'translateX(-50%)';
+                centerCard();
             }
         }
 
@@ -973,6 +1043,7 @@
         });
         card.querySelector('.onboarding-skip').addEventListener('click', finish);
 
+        window.addEventListener('resize', onResize);
         render();
     })();
     {% endif %}

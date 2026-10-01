@@ -345,6 +345,9 @@ def secret_revoke_share(request, share_id):
         'nombre_servicio': share.secret.name,
     })
     messages.success(request, _('Compartición revocada.'))
+    next_url = request.META.get('HTTP_REFERER')
+    if next_url:
+        return redirect(next_url)
     return redirect('secrets:detail', pk=share.secret.pk)
 
 

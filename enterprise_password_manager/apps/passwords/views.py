@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count, F
-from apps.secrets.models import Secret
+from apps.secrets.models import Secret, SecretShare
 from apps.notifications.models import Notification
 from .models import (
     PasswordEntry, Folder, Category, Tag, Vault, Share, ShareRequest, ShareAccessLog, PasswordHistory,
@@ -811,6 +811,9 @@ def revoke_share(request, share_id):
     })
 
     messages.success(request, _('Acceso revocado'))
+    next_url = request.META.get('HTTP_REFERER')
+    if next_url:
+        return redirect(next_url)
     return redirect('passwords:detail', pk=share.entry.pk)
 
 
@@ -863,16 +866,39 @@ def update_share_permission(request, share_id):
 
 @login_required
 def share_requests_list(request):
+    """Gestión de recursos compartidos.
+
+    Muestra tres cosas:
+      1. Lo que YO he compartido (contraseñas y secretos), vigente e histórico.
+      2. Las solicitudes pendientes que debo resolver (soy el dueño).
+      3. Las solicitudes que he enviado y su respuesta.
+    """
     requests_qs = ShareRequest.objects.filter(
         entry__vault__user=request.user
     ).select_related('entry', 'requested_by', 'target_user')
     my_requests = ShareRequest.objects.filter(
         requested_by=request.user
     ).select_related('entry', 'target_user')
+
+    # Lo que yo compartí: primero lo vigente, luego lo histórico (revocado/expirado).
+    now = timezone.now()
+    still_valid = Q(is_revoked=False) & (Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+
+    my_shares = Share.objects.filter(shared_by=request.user).select_related(
+        'entry', 'shared_with_user', 'shared_with_group'
+    ).order_by('-created_at')
+    my_secret_shares = SecretShare.objects.filter(shared_by=request.user).select_related(
+        'secret', 'shared_with_user', 'shared_with_group'
+    ).order_by('-created_at')
+
     return render(request, 'passwords/share_requests.html', {
         'pending_requests': requests_qs.filter(status='pending'),
         'responded_requests': requests_qs.exclude(status='pending'),
         'my_requests': my_requests,
+        'my_shares_active': my_shares.filter(still_valid),
+        'my_shares_history': my_shares.exclude(still_valid),
+        'my_secret_shares_active': my_secret_shares.filter(still_valid),
+        'my_secret_shares_history': my_secret_shares.exclude(still_valid),
     })
 
 

@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, View
+from django.views.decorators.http import require_POST
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
@@ -192,6 +193,98 @@ def user_reset_password(request, pk):
             messages.success(request, _(f'Contraseña restablecida para {user.email}'))
             return redirect('users:list')
     return render(request, 'users/user_reset_password.html', {'user_obj': user})
+
+
+def _safe_next(request):
+    """Referer solo si es una ruta interna (evita redirecciones fuera del sitio)."""
+    ref = request.META.get('HTTP_REFERER') or ''
+    if ref.startswith('/') and not ref.startswith('//'):
+        return ref
+    return None
+
+
+@login_required
+@require_POST
+def user_unlock(request, pk):
+    """Desbloquea una cuenta bloqueada por intentos fallidos de login local.
+
+    También limpia el bloqueo de django-axes (activo en producción) para que el
+    usuario pueda volver a entrar sin esperar al enfriamiento.
+    """
+    user = get_object_or_404(User, pk=pk)
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+
+    intentos = user.failed_local_attempts
+    user.failed_local_attempts = 0
+    user.save(update_fields=['failed_local_attempts'])
+
+    # django-axes lleva su propio contador/bloqueo (solo en producción).
+    try:
+        from axes.utils import reset_attempts
+        reset_attempts(username=user.email)
+    except Exception:
+        try:
+            from axes.utils import reset as axes_reset
+            axes_reset()
+        except Exception:
+            pass
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='ACCOUNT_UNLOCKED',
+        details=f'Admin desbloqueó la cuenta {user.email} (intentos fallidos: {intentos})',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(
+        request,
+        _('Cuenta desbloqueada. Se limpiaron los intentos fallidos de %s') % user.email,
+    )
+    return redirect(_safe_next(request) or 'users:list')
+
+
+@login_required
+@require_POST
+def user_force_logout(request, pk):
+    """Cierra las sesiones del usuario en todos los equipos.
+
+    Resuelve el caso en que el bloqueo de 'solo una sesión activa' queda
+    inconsistente (sesión fantasma en la base) e impide volver a entrar.
+    Además de borrar los registros ActiveSession, destruye la sesión real en el
+    backend para que el otro equipo quede deslogueado de verdad.
+    """
+    user = get_object_or_404(User, pk=pk)
+    if not request.user.can_manage_users():
+        raise PermissionDenied
+
+    from importlib import import_module
+    from django.conf import settings
+
+    sesiones = list(ActiveSession.objects.filter(user=user))
+    for s in sesiones:
+        if s.session_key:
+            try:
+                engine = import_module(settings.SESSION_ENGINE)
+                engine.SessionStore(session_key=s.session_key).delete()
+            except Exception:
+                pass
+    borradas = ActiveSession.objects.filter(user=user).delete()[0]
+
+    from apps.audit.models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action='SESSIONS_FORCE_CLOSED',
+        details=f'Admin cerró {borradas} sesión(es) de {user.email}',
+        result='success',
+        ip_address=request.META.get('REMOTE_ADDR', ''),
+    )
+    messages.success(
+        request,
+        _('Se cerraron %s sesión(es) de %s. Ya puede volver a entrar.') % (borradas, user.email),
+    )
+    return redirect(_safe_next(request) or 'users:list')
 
 
 class GroupListView(SuperAdminMixin, ListView):

@@ -59,6 +59,12 @@
                                 {% else %}
                                     <span class="badge bg-danger">Deshabilitado</span>
                                 {% endif %}
+                                {% if u.is_locally_locked %}
+                                    <br><span class="badge bg-warning text-dark" title="Bloqueada por intentos fallidos de inicio de sesión"><i class="bi bi-lock-fill"></i> Bloqueado</span>
+                                {% endif %}
+                                {% if u.active_session_count %}
+                                    <br><span class="badge bg-secondary" title="Sesiones activas registradas"><i class="bi bi-laptop"></i> {{ u.active_session_count }}</span>
+                                {% endif %}
                             </td>
                             <td>{% if u.mfa_enabled %}<i class="bi bi-shield-check text-success"></i>{% else %}<i class="bi bi-shield text-muted"></i>{% endif %}</td>
                             <td>
@@ -75,6 +81,22 @@
                                     <a href="{% url 'users:toggle_active' u.pk %}" class="btn btn-outline-{% if u.is_active %}warning{% else %}success{% endif %}" title="{% if u.is_active %}Deshabilitar{% else %}Habilitar{% endif %}">
                                         <i class="bi bi-{% if u.is_active %}pause{% else %}play{% endif %}"></i>
                                     </a>
+                                    {% if u.is_locally_locked %}
+                                    <form method="post" action="{% url 'users:unlock' u.pk %}" class="d-inline" id="unlock-user-{{ u.pk }}">
+                                        {% csrf_token %}
+                                        <button type="button" class="btn btn-outline-success" title="Desbloquear (limpiar intentos fallidos y bloqueo de axes)" onclick="ticoConfirm('¿Desbloquear la cuenta de {{ u.email|escapejs }}? Se reiniciarán los intentos fallidos.', 'unlock-user-{{ u.pk }}', 'btn-success')">
+                                            <i class="bi bi-unlock-fill"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    {% if u.active_session_count %}
+                                    <form method="post" action="{% url 'users:force_logout' u.pk %}" class="d-inline" id="logout-user-{{ u.pk }}">
+                                        {% csrf_token %}
+                                        <button type="button" class="btn btn-outline-secondary" title="Cerrar sesiones en todos los equipos" onclick="ticoConfirm('¿Cerrar todas las sesiones activas de {{ u.email|escapejs }}? Podrá volver a iniciar sesión.', 'logout-user-{{ u.pk }}', 'btn-secondary')">
+                                            <i class="bi bi-box-arrow-left"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                     <a href="{% url 'users:delete' u.pk %}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></a>
                                 </div>
                             </td>
