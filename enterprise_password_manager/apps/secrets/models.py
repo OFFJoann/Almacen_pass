@@ -6,6 +6,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from apps.passwords.encryption import encrypt_field, decrypt_field
 
+EXPIRY_WARNING_DAYS = 5
+
 
 class Secret(models.Model):
     TYPE_CHOICES = [
@@ -39,6 +41,10 @@ class Secret(models.Model):
     updated_at = models.DateTimeField(_('actualizado el'), auto_now=True)
     expires_at = models.DateTimeField(_('fecha de vencimiento'), null=True, blank=True)
     expiry_notified_at = models.DateTimeField(_('notificado el'), null=True, blank=True)
+    expiry_warning_notified_at = models.DateTimeField(
+        _('advertencia de vencimiento enviada el'), null=True, blank=True,
+        help_text=_('Momento en que se envió la alerta de vencimiento próximo.'),
+    )
 
     class Meta:
         verbose_name = _('secreto')
@@ -52,6 +58,19 @@ class Secret(models.Model):
         if self.expires_at and timezone.now() > self.expires_at:
             return True
         return False
+
+    def days_until_expiry(self):
+        """Días completos restantes. Negativo si ya venció, None sin fecha."""
+        if not self.expires_at:
+            return None
+        return (self.expires_at - timezone.now()).days
+
+    def is_expiring_soon(self, days=EXPIRY_WARNING_DAYS):
+        """True si vence en menos de ``days`` días (sin haber vencido aún)."""
+        if not self.expires_at:
+            return False
+        now = timezone.now()
+        return now <= self.expires_at <= now + timezone.timedelta(days=days)
 
     def set_data(self, data_dict):
         raw = json.dumps(data_dict)

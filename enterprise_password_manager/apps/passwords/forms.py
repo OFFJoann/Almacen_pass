@@ -35,14 +35,18 @@ class PasswordEntryForm(forms.ModelForm):
             'tags': forms.SelectMultiple(attrs={'class': 'form-control select2'}),
             'sensitivity': forms.Select(attrs={'class': 'form-control'}),
             'is_favorite': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'expires_at': forms.DateTimeInput(attrs={
-                'class': 'form-control', 'type': 'datetime-local'
-            }),
+            'expires_at': forms.DateTimeInput(
+                attrs={'class': 'form-control', 'type': 'datetime-local'},
+                format='%Y-%m-%dT%H:%M',
+            ),
         }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
+        self.fields['expires_at'].input_formats = [
+            '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
+        ]
         if user:
             from .models import folder_tree_for_user, flatten_folder_tree
             self.fields['folder'].queryset = Folder.objects.filter(user=user)

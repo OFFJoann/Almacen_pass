@@ -1,1 +1,4 @@
 enterprise_password_manager/licencias_API/license-api.tar
+# Certificados TLS descargados manualmente (no versionar)
+**/docker/certs/*.pem
+**/docker/certs/*.crt

@@ -15,6 +15,15 @@
         <a href="{% url 'passwords:detail' entry.pk %}" class="text-decoration-none fw-medium">
             <i class="bi bi-key"></i> {{ entry.name }}
             {% if entry.is_compromised %}<span class="badge bg-danger ms-1" title="Expuesta en filtraciones">DarkWeb</span>{% endif %}
+            {% if entry.expires_at %}
+                {% if entry.is_expired %}
+                    <span class="badge bg-danger ms-1" title="Venció {{ entry.expires_at|date:'d/m/Y H:i' }}"><i class="bi bi-exclamation-triangle-fill"></i> Vencido</span>
+                {% elif entry.is_expiring_soon %}
+                    <span class="badge bg-warning text-dark ms-1" title="Vence {{ entry.expires_at|date:'d/m/Y H:i' }}"><i class="bi bi-hourglass-split"></i> Próximo a vencer ({{ entry.days_until_expiry }} día{{ entry.days_until_expiry|pluralize:'s' }})</span>
+                {% else %}
+                    <span class="badge bg-info text-dark ms-1" title="Vence {{ entry.expires_at|date:'d/m/Y H:i' }}">Vence {{ entry.expires_at|date:'d/m/Y' }}</span>
+                {% endif %}
+            {% endif %}
         </a>
     </td>
     <td><small class="text-muted">{{ entry.get_username|truncatechars:30 }}</small></td>

@@ -89,6 +89,7 @@ def secret_edit(request, pk):
             secret = form.save(commit=False)
             if secret.expires_at != old_expires:
                 secret.expiry_notified_at = None
+                secret.expiry_warning_notified_at = None
             secret.save()
             messages.success(request, _('Secreto actualizado exitosamente.'))
             if is_ajax:
