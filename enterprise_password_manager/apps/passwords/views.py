@@ -761,7 +761,18 @@ def entry_share(request, pk):
                 return JsonResponse({'status': 'ok', 'message': _('Contraseña compartida exitosamente')})
             return redirect('passwords:detail', pk=entry.pk)
     else:
-        form = ShareForm(user=request.user)
+        current = Share.objects.filter(
+            entry=entry, is_revoked=False
+        ).select_related('shared_with_user', 'shared_with_group').order_by('-created_at').first()
+        initial = {}
+        if current:
+            initial = {
+                'shared_with_user': current.shared_with_user_id,
+                'shared_with_group': current.shared_with_group_id,
+                'permission': current.permission,
+                'expires_at': current.expires_at,
+            }
+        form = ShareForm(user=request.user, initial=initial)
 
     all_existing = Share.objects.filter(entry=entry, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()

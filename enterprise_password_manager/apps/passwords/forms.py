@@ -113,13 +113,17 @@ class ShareForm(forms.ModelForm):
             'shared_with_user': forms.Select(attrs={'class': 'form-control select2'}),
             'shared_with_group': forms.Select(attrs={'class': 'form-control select2'}),
             'permission': forms.Select(attrs={'class': 'form-control'}),
-            'expires_at': forms.DateTimeInput(attrs={
-                'class': 'form-control', 'type': 'datetime-local'
-            }),
+            'expires_at': forms.DateTimeInput(
+                attrs={'class': 'form-control', 'type': 'datetime-local'},
+                format='%Y-%m-%dT%H:%M',
+            ),
         }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['expires_at'].input_formats = [
+            '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
+        ]
         if user:
             from apps.users.models import User
             self.fields['shared_with_user'].queryset = User.objects.filter(

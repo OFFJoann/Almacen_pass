@@ -310,7 +310,18 @@ def secret_share(request, pk):
                 return JsonResponse({'status': 'ok', 'message': _('Secreto compartido exitosamente.')})
             return redirect('secrets:detail', pk=secret.pk)
     else:
-        form = SecretShareForm(user=request.user)
+        current = SecretShare.objects.filter(
+            secret=secret, is_revoked=False
+        ).select_related('shared_with_user', 'shared_with_group').order_by('-created_at').first()
+        initial = {}
+        if current:
+            initial = {
+                'shared_with_user': current.shared_with_user_id,
+                'shared_with_group': current.shared_with_group_id,
+                'permission': current.permission,
+                'expires_at': current.expires_at,
+            }
+        form = SecretShareForm(user=request.user, initial=initial)
 
     all_existing = SecretShare.objects.filter(secret=secret, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
     seen = set()
