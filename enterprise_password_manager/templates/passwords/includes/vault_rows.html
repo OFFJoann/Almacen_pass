@@ -46,7 +46,7 @@
     </td>
     <td><small class="text-muted">{{ entry.last_accessed|timesince|default:'Nunca' }}</small></td>
     <td>
-        <div class="d-inline-flex align-items-center gap-1">
+        <div class="d-inline-flex align-items-center gap-1 row-actions">
             <div class="btn-group btn-group-sm">
                 <a href="{% url 'passwords:detail' entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
                 <button type="button" class="btn btn-outline-info" title="Compartir" onclick="openShareModal('{{ entry.pk }}', '{{ entry.name|escapejs }}')"><i class="bi bi-share"></i></button>

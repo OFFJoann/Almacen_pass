@@ -8,8 +8,9 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
 from django.views.decorators.http import require_POST
+from django.core.exceptions import PermissionDenied
 from datetime import timedelta
-from .models import Secret, SecretShare
+from .models import Secret, SecretShare, EXPIRY_WARNING_DAYS
 from .forms import ApiKeyForm, SshKeyForm, CreditCardForm, CustomSecretForm, SecretShareForm
 from apps.users.models import get_user_effective_policy
 from apps.mailer.services import notify_event
@@ -26,6 +27,15 @@ FORM_MAP = {
 def secret_list(request):
     my_secrets = Secret.objects.filter(user=request.user, is_deleted=False, is_obsolete=False)
 
+    active_expiry = request.GET.get('expiry')
+    if active_expiry in ('expired', 'soon'):
+        now = timezone.now()
+        if active_expiry == 'expired':
+            my_secrets = my_secrets.filter(expires_at__isnull=False, expires_at__lt=now)
+        else:
+            threshold = now + timedelta(days=EXPIRY_WARNING_DAYS)
+            my_secrets = my_secrets.filter(expires_at__isnull=False, expires_at__gte=now, expires_at__lte=threshold)
+
     user_group_ids = list(request.user.groups.values_list('pk', flat=True))
     shared_to_me = SecretShare.objects.filter(
         Q(is_revoked=False),
@@ -39,6 +49,7 @@ def secret_list(request):
         'secrets': my_secrets,
         'shared_to_me': shared_to_me,
         'trash_count': trash_count,
+        'active_expiry': active_expiry,
     })
 
 
@@ -91,9 +102,9 @@ def secret_edit(request, pk):
                 secret.expiry_notified_at = None
                 secret.expiry_warning_notified_at = None
             secret.save()
-            messages.success(request, _('Secreto actualizado exitosamente.'))
             if is_ajax:
                 return JsonResponse({'status': 'ok', 'message': _('Secreto actualizado exitosamente.')})
+            messages.success(request, _('Secreto actualizado exitosamente.'))
             return redirect('secrets:list')
     else:
         data = secret.get_data()
@@ -246,23 +257,39 @@ def secret_detail(request, pk):
 
 @login_required
 def secret_share(request, pk):
-    secret = get_object_or_404(Secret, pk=pk, user=request.user, is_deleted=False, is_obsolete=False)
+    secret = get_object_or_404(Secret, pk=pk, is_deleted=False, is_obsolete=False)
+    is_owner = secret.user == request.user
+
+    if not is_owner:
+        user_group_ids = list(request.user.groups.values_list('pk', flat=True))
+        can_reshare = SecretShare.objects.filter(
+            secret=secret, is_revoked=False, permission='reshare'
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).filter(
+            Q(shared_with_user=request.user) | Q(shared_with_group__in=user_group_ids)
+        ).exists()
+        if not can_reshare:
+            raise PermissionDenied(_('No tienes permiso para compartir este secreto.'))
 
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
     if request.method == 'POST':
-        form = SecretShareForm(request.POST, user=request.user)
+        form = SecretShareForm(request.POST, user=request.user, reshare=not is_owner)
         if form.is_valid():
             target_user = form.cleaned_data.get('shared_with_user')
             target_group = form.cleaned_data.get('shared_with_group')
             permission = form.cleaned_data.get('permission')
             expires_at = form.cleaned_data.get('expires_at')
+            if not is_owner:
+                permission = 'read'
 
-            existing = None
-            if target_user:
-                existing = SecretShare.objects.filter(secret=secret, is_revoked=False, shared_with_user=target_user).first()
-            elif target_group:
-                existing = SecretShare.objects.filter(secret=secret, is_revoked=False, shared_with_group=target_group).first()
+            target_q = Q(shared_with_user=target_user) if target_user else Q(shared_with_group=target_group)
+            existing_qs = SecretShare.objects.filter(secret=secret, is_revoked=False).filter(target_q)
+            if is_owner:
+                existing = existing_qs.first()
+            else:
+                existing = existing_qs.filter(shared_by=request.user).first()
 
             if existing:
                 existing.permission = permission
@@ -273,6 +300,7 @@ def secret_share(request, pk):
                 share = form.save(commit=False)
                 share.secret = secret
                 share.shared_by = request.user
+                share.permission = permission
                 share.save()
 
                 target = share.shared_with_user.email if share.shared_with_user else share.shared_with_group.name
@@ -310,9 +338,11 @@ def secret_share(request, pk):
                 return JsonResponse({'status': 'ok', 'message': _('Secreto compartido exitosamente.')})
             return redirect('secrets:detail', pk=secret.pk)
     else:
-        current = SecretShare.objects.filter(
-            secret=secret, is_revoked=False
-        ).select_related('shared_with_user', 'shared_with_group').order_by('-created_at').first()
+        current = None
+        if is_owner:
+            current = SecretShare.objects.filter(
+                secret=secret, is_revoked=False
+            ).select_related('shared_with_user', 'shared_with_group').order_by('-created_at').first()
         initial = {}
         if current:
             initial = {
@@ -321,19 +351,20 @@ def secret_share(request, pk):
                 'permission': current.permission,
                 'expires_at': current.expires_at,
             }
-        form = SecretShareForm(user=request.user, initial=initial)
+        form = SecretShareForm(user=request.user, initial=initial, reshare=not is_owner)
 
-    all_existing = SecretShare.objects.filter(secret=secret, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
-    seen = set()
     existing_shares = []
-    for s in all_existing:
-        key = ('user', s.shared_with_user_id) if s.shared_with_user else ('group', s.shared_with_group_id)
-        if key not in seen:
-            seen.add(key)
-            existing_shares.append(s)
+    if is_owner:
+        all_existing = SecretShare.objects.filter(secret=secret, is_revoked=False).select_related('shared_with_user', 'shared_with_group').order_by('-created_at')
+        seen = set()
+        for s in all_existing:
+            key = ('user', s.shared_with_user_id) if s.shared_with_user else ('group', s.shared_with_group_id)
+            if key not in seen:
+                seen.add(key)
+                existing_shares.append(s)
     if is_ajax:
         partial = render_to_string('secrets/includes/share_form_partial.html',
-                                   {'form': form, 'secret': secret, 'existing_shares': existing_shares},
+                                   {'form': form, 'secret': secret, 'existing_shares': existing_shares, 'is_owner': is_owner},
                                    request=request)
         if request.method == 'POST':
             return JsonResponse({'status': 'error', 'html': partial})
@@ -342,6 +373,7 @@ def secret_share(request, pk):
         'form': form,
         'secret': secret,
         'existing_shares': existing_shares,
+        'is_owner': is_owner,
     })
 
 

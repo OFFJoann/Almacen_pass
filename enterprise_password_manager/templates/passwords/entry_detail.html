@@ -4,6 +4,11 @@
 {% block title %}{{ entry.name }} - Administrador de Contraseñas{% endblock %}
 
 {% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver a Mi Bóveda
+    </a>
+</div>
 <div class="row">
     <div class="col-md-8">
         <div class="card shadow-sm">
@@ -259,8 +264,25 @@
     {% endif %}
     document.addEventListener('htmx:afterSwap', function(e) {
         if (e.target && e.target.id === 'totpSection') {
-            startTotpTicker();
-            refreshTotp();
+            if (document.getElementById('totpCode')) {
+                startTotpTicker();
+                refreshTotp();
+            }
+        }
+    });
+    document.addEventListener('totpSaved', function() {
+        var modalEl = document.getElementById('addTotpModal');
+        if (!modalEl) return;
+        var instance = bootstrap.Modal.getInstance(modalEl);
+        if (instance) {
+            instance.hide();
+        } else if (modalEl.classList.contains('show')) {
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            modalEl.setAttribute('aria-hidden', 'true');
+            document.querySelectorAll('.modal-backdrop').forEach(function(b) { b.remove(); });
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('padding-right');
         }
     });
 </script>

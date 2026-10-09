@@ -34,7 +34,7 @@
     </div>
 </div>
 
-{% if not entry.has_totp %}
+{% if not entry.has_totp and not hide_modal %}
 <div class="modal fade" id="addTotpModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -43,13 +43,19 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div id="totpModalError" aria-live="polite"></div>
                 <h6 class="mb-3"><i class="bi bi-keyboard"></i> Clave manual</h6>
-                <p class="small text-muted">Ingresa manualmente la clave secreta que te proporcionó el servicio</p>
+                <p class="small text-muted">Ingresa la clave secreta que te proporcionó el servicio. TICO BOX generará los códigos por ti.</p>
                 <form id="manualTotpForm" hx-post="{% url 'passwords:totp_generate' entry.pk %}" hx-target="#totpSection" hx-swap="outerHTML">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">Clave secreta</label>
-                        <input type="text" class="form-control font-monospace" name="secret" placeholder="ej: JBSWY3DPEHPK3PXP" required>
+                        <label class="form-label" for="totpSecretInput">Clave secreta</label>
+                        <input type="text" class="form-control font-monospace" id="totpSecretInput" name="secret" placeholder="ej: JBSWY3DPEHPK3PXP" autocomplete="off" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="totpCodeInput">Código de verificación <span class="text-muted fw-normal">(opcional)</span></label>
+                        <input type="text" class="form-control font-monospace text-center fs-5" id="totpCodeInput" name="code" placeholder="123456" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code">
+                        <div class="form-text">Si usas una app de autenticación (Google Authenticator, Authy…), pega aquí el código que muestra para comprobar que la clave es correcta. Si no, déjalo vacío.</div>
                     </div>
                     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Guardar 2FA</button>
                 </form>

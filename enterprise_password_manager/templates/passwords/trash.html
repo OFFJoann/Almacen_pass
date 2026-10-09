@@ -7,10 +7,12 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-trash-fill"></i> Papelera</h4>
     <div class="d-flex gap-2">
-        <form method="post" action="{% url 'passwords:empty_trash' %}" onsubmit="return confirm('¿Vaciar papelera? Solo se eliminarán los elementos que llevan más de {{ retention_days }} días en la papelera.')">
+        {% if has_deletable %}
+        <form method="post" action="{% url 'passwords:empty_trash' %}" onsubmit="return confirm('¿Vaciar papelera? Se eliminarán permanentemente los elementos que llevan más de {{ retention_days }} días en la papelera.')">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Vaciar Papelera</button>
         </form>
+        {% endif %}
         <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
     </div>
 </div>

@@ -16,79 +16,179 @@
         z-index: 2;
         box-shadow: inset 0 -1px 0 var(--bs-border-color);
     }
-    .organizer-scroll {
-        max-height: calc(30 * 1.7rem);
+    .folder-sidebar {
+        background: linear-gradient(180deg, var(--bs-tertiary-bg) 0%, var(--bs-body-bg) 150%);
+        position: sticky;
+        top: calc(72px + 1rem);
+    }
+    @media (min-width: 768px) {
+        .folder-col { flex: 0 0 420px !important; max-width: 420px !important; }
+    }
+    .folder-sidebar-head {
+        background: transparent;
+        border-bottom: 1px solid var(--bs-border-color-translucent);
+        padding: .9rem 1rem !important;
+    }
+    .folder-title-icon {
+        width: 1.65rem;
+        height: 1.65rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .5rem;
+        background-color: var(--bs-tertiary-bg);
+        color: var(--bs-secondary-color);
+        font-size: .8rem;
+    }
+    .folder-add {
+        width: 2rem;
+        height: 2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .5rem;
+        background: transparent;
+        color: var(--sidebar-color);
+        transition: background-color .15s ease, color .15s ease;
+    }
+    .folder-add:hover { background: var(--sidebar-hover); color: #fff; }
+    .folder-tree {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-height: min(52vh, 480px);
         overflow-y: auto;
+        padding: .1rem .2rem;
     }
-    .organizer-search:not(:placeholder-shown) {
-        border-color: var(--bs-primary);
+    .folder-tree::-webkit-scrollbar { width: 6px; height: 6px; }
+    .folder-tree::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 3px; }
+    .folder-row {
+        border-radius: .7rem;
+        padding: .1rem .2rem .1rem .15rem;
+        transition: background-color .15s ease;
     }
-    .tree-item {
+    .folder-row:hover { background-color: var(--bs-tertiary-bg); }
+    .folder-link {
+        flex: 1 1 auto;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: .25rem;
-        padding: .22rem .5rem;
-        border-radius: .375rem;
-        transition: background-color .15s ease;
-    }
-    .tree-item:hover { background-color: var(--bs-tertiary-bg); }
-    .tree-item.active { background-color: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
-    .tree-item.active .tree-name { color: var(--bs-primary); font-weight: 500; }
-    .tree-root {
-        font-weight: 600;
-        padding: .28rem .5rem;
-        border-radius: .375rem;
-        transition: background-color .15s ease;
-    }
-    .tree-root:hover { background-color: var(--bs-tertiary-bg); }
-    .tree-root.active { background-color: var(--bs-primary); color: #fff; }
-    .tree-root.active .tree-name { color: #fff; }
-    .tree-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        gap: .55rem;
         min-width: 0;
-        flex: 1 1 auto;
-        display: inline-block;
+        padding: .42rem .6rem;
+        border-radius: .65rem;
+        color: var(--bs-body-color);
+        text-decoration: none;
+        font-size: .875rem;
+        font-weight: 500;
+        transition: background-color .15s ease, color .15s ease, transform .12s ease, box-shadow .15s ease;
     }
-    .tree-actions {
+    .folder-link:hover {
+        color: var(--bs-body-color);
+        transform: translateX(2px);
+    }
+    .folder-link.active {
+        background: rgba(13, 110, 253, 0.15);
+        color: var(--sidebar-active);
+        border-left: 3px solid var(--sidebar-active);
+        padding-left: .375rem;
+    }
+    .folder-icon {
+        flex: 0 0 auto;
+        width: 1.65rem;
+        height: 1.65rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .5rem;
+        background-color: var(--bs-tertiary-bg);
+        color: var(--bs-secondary-color);
+        font-size: .8rem;
+        transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+    .folder-link.active .folder-icon {
+        background-color: rgba(13, 110, 253, 0.25);
+        color: var(--sidebar-active);
+    }
+    .folder-count {
+        flex: 0 0 auto;
+        background-color: var(--bs-tertiary-bg);
+        color: var(--bs-secondary-color);
+        border-radius: 50rem;
+        padding: .1rem .5rem;
+        font-size: .68rem;
+        font-weight: 600;
+        transition: background-color .15s ease, color .15s ease;
+    }
+    .folder-link.active .folder-count {
+        background-color: var(--sidebar-active);
+        color: #fff;
+        box-shadow: 0 2px 6px rgba(13, 110, 253, .4);
+    }
+    .folder-children {
+        margin-left: .75rem;
+        padding-left: .45rem;
+        border-left: 1px dashed var(--bs-border-color);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-top: 2px;
+    }
+    .folder-children.collapsed { display: none; }
+    .folder-toggle {
+        cursor: pointer;
+        color: var(--bs-secondary-color);
+        font-size: .72rem;
+        width: 1.1rem;
+        text-align: center;
+        flex: 0 0 auto;
+        transition: transform .2s ease;
+        user-select: none;
+    }
+    .folder-toggle.open { transform: rotate(90deg); }
+    .folder-toggle-spacer { display: inline-block; width: 1.1rem; }
+    .folder-actions {
         flex: 0 0 auto;
         display: inline-flex;
         align-items: center;
-        gap: .3rem;
-        opacity: .7;
+        gap: .25rem;
+        opacity: 0;
         transition: opacity .15s ease;
     }
-    .tree-item:hover .tree-actions { opacity: 1; }
-    .folder-children {
-        margin-left: 1rem;
-        padding-left: .4rem;
+    .folder-row:hover .folder-actions,
+    .folder-row:focus-within .folder-actions { opacity: 1; }
+    .folder-actions a {
+        width: 1.4rem;
+        height: 1.4rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .4rem;
+        font-size: .75rem;
+        color: var(--bs-secondary-color);
+        transition: color .15s ease, background-color .15s ease;
     }
-    .folder-children .tree-item { border: none; }
-    .folder-children.collapsed { display: none; }
-    .folder-children.closing { display: none; }
-    .folder-toggle { cursor: pointer; font-size: .8rem; width: 1rem; text-align: center; flex: 0 0 auto; }
-    .folder-toggle-placeholder { display: inline-block; width: 1rem; flex: 0 0 auto; }
-    .folder-node { position: relative; }
-    .folder-row {
-        padding: .22rem .5rem;
-        line-height: 1.3;
-        gap: .25rem;
+    .folder-actions a:hover { color: var(--bs-primary); background-color: var(--bs-primary-bg-subtle); }
+    .folder-actions a:last-child:hover { color: var(--bs-danger); background-color: var(--bs-danger-bg-subtle); }
+    .folder-empty { font-size: .8rem; margin: .75rem .4rem; }
+    .folder-search { position: relative; }
+    .folder-search > i {
+        position: absolute;
+        left: .75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--bs-secondary-color);
+        font-size: .8rem;
+        pointer-events: none;
     }
-    .folder-row .folder-actions {
-        flex: 0 0 auto;
-    }
-    .folder-row .folder-icon { color: var(--bs-body-color); }
-    .folder-child-indent { display: flex; flex-direction: column; }
+    .folder-search .form-control { padding-left: 2.1rem; border-radius: .6rem; }
     .tree-hidden { display: none !important; }
-    .spin { display: inline-block; animation: tico-spin 1s linear infinite; }
-    @keyframes tico-spin { to { transform: rotate(360deg); } }
+    .folder-open-anim > .folder-children { animation: tico-fade-down .18s ease; }
     @keyframes tico-fade-down {
         from { opacity: 0; transform: translateY(-4px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    .folder-open-anim > .folder-children { animation: tico-fade-down .18s ease; }
+    .spin { display: inline-block; animation: tico-spin 1s linear infinite; }
+    @keyframes tico-spin { to { transform: rotate(360deg); } }
     .bulk-toolbar {
         background-color: var(--bs-tertiary-bg);
         border: 1px solid var(--bs-border-color);
@@ -105,10 +205,10 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-key-fill"></i> Mi Bóveda</h4>
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-primary" data-tour="folder" onclick="location.href='{% url 'passwords:folder_create' %}'">
+        <button class="btn btn-sm btn-primary" data-tour="folder" onclick="location.href='{% url 'passwords:folder_create' %}'">
             <i class="bi bi-folder-plus"></i> Carpeta
         </button>
-        <button class="btn btn-sm btn-outline-primary" data-tour="category" onclick="location.href='{% url 'passwords:category_create' %}'">
+        <button class="btn btn-sm btn-primary" data-tour="category" onclick="location.href='{% url 'passwords:category_create' %}'">
             <i class="bi bi-tag"></i> Categoría
         </button>
         <a href="{% url 'passwords:entry_create' %}" class="btn btn-sm btn-primary" data-tour="new-entry">
@@ -117,19 +217,34 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-3 mb-4">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h6 class="card-title"><i class="bi bi-folder"></i> Carpetas</h6>
-                <div class="input-group input-group-sm mb-2">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control organizer-search" id="folderSearch" placeholder="Buscar carpetas...">
+<div class="row g-4">
+    <div class="col-12 col-md-3 folder-col">
+        <div class="card shadow-sm border-0 rounded-4 folder-sidebar" data-tour="folder">
+            <div class="card-header folder-sidebar-head d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="folder-title-icon"><i class="bi bi-folder-fill"></i></span>
+                    <div>
+                        <h6 class="mb-0 fw-semibold lh-1">Carpetas</h6>
+                        <small class="text-muted">Organiza tu bóveda</small>
+                    </div>
                 </div>
-                <div class="organizer-scroll" id="vaultFolders">
-                    <div class="tree-item tree-root d-flex justify-content-between align-items-center {% if not active_folder %}active{% endif %}" id="vaultFoldersRoot">
-                        <a href="{% url 'passwords:vault' %}" class="text-decoration-none flex-grow-1 tree-name">Todos los Elementos</a>
-                        <span class="badge bg-primary rounded-pill">{{ all_count }}</span>
+                <a href="{% url 'passwords:folder_create' %}" class="btn btn-sm folder-add" title="Nueva carpeta"><i class="bi bi-folder-plus"></i></a>
+            </div>
+            <div class="card-body pt-3">
+                <div class="folder-search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" id="folderSearch" placeholder="Buscar carpetas...">
+                </div>
+                <div class="folder-tree mt-2" id="vaultFolders">
+                    <div class="folder-node">
+                        <div class="folder-row d-flex align-items-center" id="vaultFoldersRoot">
+                            <a href="{% url 'passwords:vault' %}"
+                               class="folder-link {% if not active_folder %}active{% endif %}">
+                                <span class="folder-icon"><i class="bi bi-collection-fill"></i></span>
+                                <span class="folder-name text-truncate tree-name-label">Todos los Elementos</span>
+                                <span class="folder-count badge">{{ all_count }}</span>
+                            </a>
+                        </div>
                     </div>
                     {% include 'passwords/includes/folder_node.html' with nodes=folder_tree active_folder=active_folder %}
                 </div>
@@ -155,7 +270,7 @@
                     </div>
                 </div>
                 <div class="row mb-3 g-2">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <select class="form-select" onchange="vaultFilter('category', this.value)">
                             <option value="">Todas las Categorías</option>
                             {% for cat in categories %}
@@ -163,7 +278,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <select class="form-select" data-tour="sensitivity" onchange="vaultFilter('sensitivity', this.value)">
                             <option value="">Todas las Sensibilidades</option>
                             <option value="low" {% if active_sensitivity == 'low' %}selected{% endif %}>Baja</option>
@@ -172,10 +287,17 @@
                             <option value="critical" {% if active_sensitivity == 'critical' %}selected{% endif %}>Crítica</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <select class="form-select" onchange="vaultFilter('favorite', this.value)">
                             <option value="">Todas</option>
                             <option value="1" {% if favorite_filter %}selected{% endif %}>Solo Favoritas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select{% if active_expiry %} border-warning text-warning fw-semibold{% endif %}" onchange="vaultFilter('expiry', this.value)">
+                            <option value="">Todas</option>
+                            <option value="expired" {% if active_expiry == 'expired' %}selected{% endif %}>Vencidas</option>
+                            <option value="soon" {% if active_expiry == 'soon' %}selected{% endif %}>Próximas a vencer</option>
                         </select>
                     </div>
                 </div>
@@ -213,12 +335,28 @@
                     </div>
                 {% else %}
                     <div class="text-center py-5">
-                        <i class="bi bi-key display-1 text-muted"></i>
-                        <h5 class="mt-3">Aún no hay contraseñas</h5>
-                        <p class="text-muted">Comienza agregando tu primera contraseña</p>
-                        <a href="{% url 'passwords:entry_create' %}" class="btn btn-primary">
-                            <i class="bi bi-plus-lg"></i> Agregar Contraseña
-                        </a>
+                        {% if active_expiry == 'expired' %}
+                            <i class="bi bi-calendar-x display-1 text-muted"></i>
+                            <h5 class="mt-3">No hay contraseñas vencidas</h5>
+                            <p class="text-muted">Ninguna de tus claves está vencida.</p>
+                            <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-lg"></i> Quitar filtro
+                            </a>
+                        {% elif active_expiry == 'soon' %}
+                            <i class="bi bi-hourglass-split display-1 text-muted"></i>
+                            <h5 class="mt-3">No hay contraseñas próximas a vencer</h5>
+                            <p class="text-muted">Ninguna de tus claves vence en los próximos días.</p>
+                            <a href="{% url 'passwords:vault' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-lg"></i> Quitar filtro
+                            </a>
+                        {% else %}
+                            <i class="bi bi-key display-1 text-muted"></i>
+                            <h5 class="mt-3">Aún no hay contraseñas</h5>
+                            <p class="text-muted">Comienza agregando tu primera contraseña</p>
+                            <a href="{% url 'passwords:entry_create' %}" class="btn btn-primary">
+                                <i class="bi bi-plus-lg"></i> Agregar Contraseña
+                            </a>
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>
@@ -257,15 +395,17 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <div class="btn-group btn-group-sm">
-                                                <a href="{% url 'passwords:detail' share.entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
-                                                {% if share.permission == 'write' %}
-                                                    <a href="{% url 'passwords:entry_edit' share.entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
-                                                {% elif share.permission == 'reshare' %}
-                                                    <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
-                                                {% endif %}
+                                            <div class="row-actions">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{% url 'passwords:detail' share.entry.pk %}" class="btn btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></a>
+                                                    {% if share.permission == 'write' %}
+                                                        <a href="{% url 'passwords:entry_edit' share.entry.pk %}" class="btn btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                                    {% elif share.permission == 'reshare' %}
+                                                        <a href="{% url 'passwords:entry_share' share.entry.pk %}" class="btn btn-outline-info" title="Compartir"><i class="bi bi-share"></i></a>
+                                                    {% endif %}
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" title="Revocar mi acceso" onclick="ticoConfirm('¿Revocar tu acceso a este registro compartido?', 'revoke-pw-received-{{ share.pk }}')"><i class="bi bi-x-lg"></i></button>
                                             </div>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" title="Revocar mi acceso" onclick="ticoConfirm('¿Revocar tu acceso a este registro compartido?', 'revoke-pw-received-{{ share.pk }}')"><i class="bi bi-x-lg"></i></button>
                                             <form method="post" id="revoke-pw-received-{{ share.pk }}" action="{% url 'passwords:revoke_share_received' share.pk %}" class="d-none">{% csrf_token %}</form>
                                         </td>
                                     </tr>
@@ -427,14 +567,14 @@
         setTimeout(loadMore, 200);
     })();
 
-    function toggleFolder(icon, ev) {
+    // ---------- Árbol de carpetas: expandir / plegar ----------
+    function toggleFolder(toggle, ev) {
         if (ev) ev.preventDefault();
-        const node = icon.closest('.folder-node');
+        const node = toggle.closest('.folder-node');
         const children = node ? node.querySelector(':scope > .folder-children') : null;
         if (!children) return;
         const isCollapsed = children.classList.contains('collapsed');
-        icon.classList.toggle('bi-chevron-down');
-        icon.classList.toggle('bi-chevron-right');
+        toggle.classList.toggle('open');
         if (isCollapsed) {
             node.classList.add('folder-open-anim');
             children.classList.remove('collapsed');
@@ -444,13 +584,83 @@
         }
     }
 
+    // ---------- Renombrar carpeta (inline) ----------
+    function renameFolder(pencil) {
+        const row = pencil.closest('.folder-row');
+        let link = row.querySelector('.folder-link');
+        const label = link.querySelector('.folder-name');
+        const current = label.textContent.trim();
+        const err = document.createElement('div');
+        err.className = 'text-danger small';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm';
+        input.value = current;
+        const save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'btn btn-sm btn-primary';
+        save.innerHTML = '<i class="bi bi-check-lg"></i>';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-sm btn-outline-secondary';
+        cancel.innerHTML = '<i class="bi bi-x-lg"></i>';
+        const form = document.createElement('div');
+        form.className = 'd-flex gap-1 align-items-center flex-grow-1 min-w-0';
+        form.appendChild(input);
+        form.appendChild(save);
+        form.appendChild(cancel);
+        const actions = row.querySelector('.folder-actions');
+        link.replaceWith(form);
+        if (actions) actions.style.display = 'none';
+        input.focus();
+        function restore() {
+            form.replaceWith(link);
+            if (actions) actions.style.display = '';
+            if (err.parentNode) err.remove();
+        }
+        cancel.addEventListener('click', restore);
+        save.addEventListener('click', function () { submitFolderRename(form, link, label, input, err, restore); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); submitFolderRename(form, link, label, input, err, restore); }
+            if (e.key === 'Escape') restore();
+        });
+    }
+
+    function submitFolderRename(form, link, label, input, err, restore) {
+        const row = form.closest('.folder-row');
+        const pk = row.getAttribute('data-id');
+        const parent = row.getAttribute('data-parent') || '';
+        const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        if (err.parentNode) err.remove();
+        const value = input.value.trim();
+        if (!value) { err.textContent = 'El nombre no puede estar vacío'; form.after(err); return; }
+        fetch("{% url 'passwords:folder_rename' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', pk), {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'name=' + encodeURIComponent(value) + '&parent=' + encodeURIComponent(parent)
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (res.ok) {
+                    label.textContent = res.d.name;
+                    restore();
+                } else {
+                    err.textContent = res.d.error || 'No se pudo renombrar';
+                    form.after(err);
+                }
+            })
+            .catch(function () {
+                err.textContent = 'Error de red';
+                form.after(err);
+            });
+    }
+
     // ---------- Búsqueda de carpetas (filtro en cliente) ----------
     (function () {
         const input = document.getElementById('folderSearch');
         if (!input) return;
         input.addEventListener('input', function () {
             const q = input.value.trim().toLowerCase();
-            var any = false;
             function visitNode(node) {
                 const label = node.querySelector('.tree-name-label');
                 const name = label ? label.textContent.trim().toLowerCase() : '';
@@ -467,9 +677,8 @@
                 if (q && show && childContainer) {
                     childContainer.classList.remove('collapsed');
                     const ic = node.querySelector(':scope > .folder-toggle');
-                    if (ic) { ic.classList.remove('bi-chevron-right'); ic.classList.add('bi-chevron-down'); }
+                    if (ic) ic.classList.add('open');
                 }
-                if (show) any = true;
                 return show;
             }
             Array.prototype.forEach.call(document.querySelectorAll('#vaultFolders > .folder-node'), visitNode);
@@ -704,11 +913,18 @@
         input.type = input.type === 'password' ? 'text' : 'password';
     }
 
-    function bindActionForm(container, url, modalId) {
+    function bindActionForm(container, url, modalId, confirmMsg) {
         var form = container.querySelector('form:not([action])');
         if (!form) return;
         form.addEventListener('submit', function (e) {
             e.preventDefault();
+            if (confirmMsg) {
+                ticoConfirm(confirmMsg, null, 'btn-primary', doSubmit);
+            } else {
+                doSubmit();
+            }
+        });
+        function doSubmit() {
             var btn = form.querySelector('button[type="submit"]');
             if (btn) btn.disabled = true;
             var csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -722,31 +938,35 @@
                 if (data.status === 'ok') {
                     var m = bootstrap.Modal.getInstance(document.getElementById(modalId));
                     if (m) m.hide();
-                    showToast(data.message || 'Acción completada', 'success');
-                    location.reload();
+                    if (confirmMsg) {
+                        ticoSuccess(data.message || 'Registro actualizado correctamente', function () { location.reload(); });
+                    } else {
+                        showToast(data.message || 'Acción completada', 'success');
+                        location.reload();
+                    }
                 } else {
-                    if (data.html) { container.innerHTML = data.html; bindActionForm(container, url, modalId); }
+                    if (data.html) { container.innerHTML = data.html; bindActionForm(container, url, modalId, confirmMsg); }
                     if (btn) btn.disabled = false;
                     showToast(data.message || 'Revisa los campos del formulario', 'danger');
                 }
             })
             .catch(function () { if (btn) btn.disabled = false; showToast('Error de red', 'danger'); });
-        });
+        }
     }
 
-    function loadModalForm(modalId, bodyId, url) {
+    function loadModalForm(modalId, bodyId, url, confirmMsg) {
         var body = document.getElementById(bodyId);
         body.innerHTML = '<div class="text-center py-4"><i class="bi bi-arrow-repeat spin"></i> Cargando…</div>';
         var m = new bootstrap.Modal(document.getElementById(modalId));
         m.show();
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.text(); })
-            .then(function (html) { body.innerHTML = html; bindActionForm(body, url, modalId); })
+            .then(function (html) { body.innerHTML = html; bindActionForm(body, url, modalId, confirmMsg); })
             .catch(function () { body.innerHTML = '<div class="alert alert-danger">No se pudo cargar el formulario.</div>'; });
     }
 
     function openEditModal(pk) {
-        loadModalForm('editEntryModal', 'editEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/edit/');
+        loadModalForm('editEntryModal', 'editEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/edit/', '¿Guardar los cambios de esta contraseña?');
     }
     function openShareModal(pk, name) {
         loadModalForm('shareEntryModal', 'shareEntryModalBody', "{% url 'passwords:vault' %}" + 'entry/' + pk + '/share/');

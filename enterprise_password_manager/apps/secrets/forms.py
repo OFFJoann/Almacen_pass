@@ -197,7 +197,7 @@ class SecretShareForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, reshare=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['expires_at'].input_formats = [
             '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
@@ -209,6 +209,10 @@ class SecretShareForm(forms.ModelForm):
             ).exclude(pk=user.pk)
             self.fields['shared_with_user'].required = False
             self.fields['shared_with_group'].required = False
+        if reshare:
+            self.fields['permission'].choices = [('read', _('Solo Lectura'))]
+            self.fields['permission'].initial = 'read'
+            self.fields['permission'].help_text = _('Como re-compartidor solo puedes otorgar acceso de solo lectura.')
 
     def clean(self):
         cleaned_data = super().clean()

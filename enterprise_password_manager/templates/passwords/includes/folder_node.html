@@ -1,25 +1,23 @@
 {% for node in nodes %}
-  <div class="folder-node tree-name-wrap">
-    <div class="tree-item folder-row {% if active_folder == node.folder.id|stringformat:'s' %}active{% endif %}">
-      <span class="d-flex flex-grow-1 align-items-center text-decoration-none folder-name">
-        {% if node.children %}
-          <i class="bi bi-chevron-right folder-toggle me-1" role="button" onclick="toggleFolder(this)" title="Desplegar / plegar"></i>
-        {% else %}
-          <span class="folder-toggle-placeholder me-1"></span>
-        {% endif %}
-        <a href="{% url 'passwords:vault' %}?folder={{ node.folder.id }}" class="text-decoration-none d-flex align-items-center gap-1 flex-grow-1 min-w-0 tree-name">
-          <i class="bi bi-folder{% if active_folder == node.folder.id|stringformat:'s' %}-open{% endif %} folder-icon"></i>
-          <span class="text-truncate tree-name-label">{{ node.folder.name }}</span>
-        </a>
+  <div class="folder-node">
+    <div class="folder-row d-flex align-items-center" data-id="{{ node.folder.id }}" data-parent="{{ node.folder.parent_id|default:'' }}">
+      <span class="folder-toggle me-1" role="button" onclick="toggleFolder(this, event)" title="Desplegar / plegar">
+        {% if node.children %}<i class="bi bi-chevron-right"></i>{% else %}<span class="folder-toggle-spacer"></span>{% endif %}
       </span>
-      <div class="d-flex align-items-center gap-1 folder-actions tree-actions">
-        <span class="badge bg-primary rounded-pill">{{ node.count }}</span>
-        <a href="{% url 'passwords:folder_create' %}?parent={{ node.folder.id }}" class="text-success" title="Nueva subcarpeta"><i class="bi bi-folder-plus"></i></a>
-        <a href="{% url 'passwords:folder_delete' node.folder.id %}" class="text-danger" title="Eliminar carpeta"><i class="bi bi-trash"></i></a>
+      <a href="{% url 'passwords:vault' %}?folder={{ node.folder.id }}"
+         class="folder-link {% if active_folder == node.folder.id|stringformat:'s' %}active{% endif %}">
+        <span class="folder-icon"><i class="bi bi-folder-fill"></i></span>
+        <span class="folder-name text-truncate tree-name-label">{{ node.folder.name }}</span>
+        {% if node.count %}<span class="folder-count badge">{{ node.count }}</span>{% endif %}
+      </a>
+      <div class="folder-actions d-flex align-items-center gap-1">
+        <a href="#" title="Renombrar" onclick="renameFolder(this); return false;"><i class="bi bi-pencil"></i></a>
+        <a href="{% url 'passwords:folder_create' %}?parent={{ node.folder.id }}" title="Nueva subcarpeta"><i class="bi bi-folder-plus"></i></a>
+        <a href="{% url 'passwords:folder_delete' node.folder.id %}" title="Eliminar carpeta"><i class="bi bi-trash"></i></a>
       </div>
     </div>
     {% if node.children %}
-      <div class="folder-children folder-child-indent collapsed">
+      <div class="folder-children collapsed">
         {% include 'passwords/includes/folder_node.html' with nodes=node.children active_folder=active_folder %}
       </div>
     {% endif %}

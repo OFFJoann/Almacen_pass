@@ -1,4 +1,4 @@
-:root {
+﻿:root {
     --sidebar-width: 260px;
     --sidebar-collapsed-width: 0px;
     --sidebar-bg: #1a1d23;
@@ -21,12 +21,29 @@ html {
    so headers and hints would stay white. Map them to theme-aware surfaces. */
 [data-bs-theme="dark"] .bg-light {
     background-color: var(--bs-secondary-bg) !important;
-    color: var(--bs-body-color);
+    color: var(--bs-body-color) !important;
 }
 
 [data-bs-theme="dark"] .bg-primary-subtle {
     background-color: rgba(13, 110, 253, 0.15) !important;
-    color: var(--bs-body-color);
+    color: var(--bs-body-color) !important;
+}
+
+/* El sidebar siempre es oscuro, así que su texto no puede depender del tema:
+   en modo claro .text-muted pasa a casi negro y desaparece sobre el fondo oscuro. */
+.sidebar .text-muted {
+    color: rgba(255, 255, 255, 0.68) !important;
+}
+
+.sidebar .btn-outline-secondary {
+    color: #adb5bd !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.sidebar .btn-outline-secondary:hover {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
 }
 
 [data-bs-theme="dark"] .card {
@@ -48,6 +65,34 @@ html {
 [data-bs-theme="dark"] .offcanvas,
 [data-bs-theme="dark"] .dropdown-menu {
     background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+}
+
+/* El tema select2 no sigue data-bs-theme y deja los desplegables en blanco. */
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection {
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-border-color) !important;
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-search__field,
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection__rendered {
+    background-color: transparent !important;
+    color: var(--bs-body-color) !important;
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown {
+    background-color: var(--bs-body-bg);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-results__option {
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-results__option--highlighted {
+    background-color: var(--bs-tertiary-bg);
     color: var(--bs-body-color);
 }
 
@@ -302,4 +347,92 @@ body {
     width: 100% !important;
     height: 100% !important;
     margin: 0 !important;
+}
+/* Acciones por hover: solo visibles al pasar el cursor por encima del registro */
+.vault-row .row-actions,
+.secret-card .card-actions {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s ease-in-out;
+}
+.vault-row:hover .row-actions,
+.vault-row:focus-within .row-actions,
+.secret-card:hover .card-actions,
+.secret-card:focus-within .card-actions {
+    opacity: 1;
+    visibility: visible;
+}
+/* Tabla "Compartidos Conmigo" de secretos */
+.table-hover tbody tr .row-actions {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s ease-in-out;
+}
+.table-hover tbody tr:hover .row-actions,
+.table-hover tbody tr:focus-within .row-actions {
+    opacity: 1;
+    visibility: visible;
+}
+/* Secretos: cada tarjeta se distingue como un bloque propio */
+.secret-card {
+    border: 1px solid var(--bs-border-color);
+    background-color: var(--bs-card-bg);
+    box-shadow: 0 0.125rem 0.375rem rgba(0, 0, 0, 0.08);
+    border-left: 4px solid var(--bs-secondary);
+}
+.secret-card:hover {
+    border-color: var(--sidebar-active);
+    border-left-color: var(--sidebar-active);
+}
+[data-bs-theme="dark"] .secret-card {
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.4);
+}
+.secret-card[data-type="api_key"] { border-left-color: var(--bs-warning); }
+.secret-card[data-type="ssh_key"] { border-left-color: var(--bs-success); }
+.secret-card[data-type="credit_card"] { border-left-color: var(--bs-info); }
+.secret-card[data-type="custom"] { border-left-color: var(--bs-secondary); }
+.secret-card:hover[data-type="api_key"] { border-color: var(--bs-warning); }
+.secret-card:hover[data-type="ssh_key"] { border-color: var(--bs-success); }
+.secret-card:hover[data-type="credit_card"] { border-color: var(--bs-info); }
+.secret-card:hover[data-type="custom"] { border-color: var(--bs-secondary); }
+/* Barra superior (Generar, Compartir enlace seguro): fondo como el sidebar izquierdo */
+.app-topbar {
+    background-color: var(--sidebar-bg) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+.app-topbar .btn-outline-primary {
+    color: #6ea8fe !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+}
+.app-topbar .btn-outline-success {
+    color: #75b798 !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+}
+.app-topbar .btn-outline-secondary {
+    color: #adb5bd !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+}
+.app-topbar .btn-outline-primary:hover,
+.app-topbar .btn-outline-success:hover,
+.app-topbar .btn-outline-secondary:hover {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+}
+.app-topbar .dropdown-toggle {
+    color: #adb5bd !important;
+}
+.app-topbar .dropdown-toggle:hover,
+.app-topbar .dropdown-toggle:focus {
+    color: #fff !important;
+}
+.app-topbar .dropdown-menu {
+    color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] .app-topbar {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+    background-color: var(--bs-secondary-bg);
+    border-color: rgba(255, 255, 255, 0.14);
 }

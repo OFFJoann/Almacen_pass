@@ -97,6 +97,7 @@ def _base_vault_entries(request, vault):
     search = request.GET.get('search', '')
     sensitivity = request.GET.get('sensitivity')
     favorite = request.GET.get('favorite')
+    expiry = request.GET.get('expiry')
 
     if folder_id:
         tree = folder_tree_for_user(request.user)
@@ -115,6 +116,13 @@ def _base_vault_entries(request, vault):
         entries = entries.filter(sensitivity=sensitivity)
     if favorite:
         entries = entries.filter(is_favorite=True)
+    if expiry == 'expired':
+        entries = entries.filter(expires_at__isnull=False, expires_at__lt=timezone.now())
+    elif expiry == 'soon':
+        from apps.secrets.models import EXPIRY_WARNING_DAYS
+        now = timezone.now()
+        threshold = now + timezone.timedelta(days=EXPIRY_WARNING_DAYS)
+        entries = entries.filter(expires_at__isnull=False, expires_at__gte=now, expires_at__lte=threshold)
     return entries
 
 
@@ -160,6 +168,7 @@ def vault_view(request):
     search = request.GET.get('search', '')
     sensitivity = request.GET.get('sensitivity')
     favorite = request.GET.get('favorite')
+    expiry = request.GET.get('expiry')
 
     shared_with_me = Share.objects.filter(
         Q(shared_with_user=request.user) | Q(shared_with_group__members=request.user),
@@ -194,6 +203,7 @@ def vault_view(request):
         'search': search,
         'active_sensitivity': sensitivity,
         'favorite_filter': favorite,
+        'active_expiry': expiry,
         'show_onboarding': (not request.user.onboarding_completed) or request.GET.get('tour') == '1',
         'auto_export_after_stepup': auto_export,
         'export_stepup_query': export_stepup_query,
@@ -372,9 +382,9 @@ def entry_edit(request, pk):
                 'url': entry.url or '/',
             })
 
-            messages.success(request, _('Contraseña actualizada exitosamente'))
             if is_ajax:
                 return JsonResponse({'status': 'ok', 'message': _('Contraseña actualizada exitosamente')})
+            messages.success(request, _('Contraseña actualizada exitosamente'))
             return redirect('passwords:vault')
     else:
         form = PasswordEntryForm(instance=entry, user=request.user)
@@ -547,6 +557,8 @@ def trash_view(request):
         'entries': deleted_entries,
         'secrets': deleted_secrets,
         'retention_days': retention,
+        'has_deletable': any(e.can_permanently_delete for e in deleted_entries)
+                         or any(s.can_permanently_delete for s in deleted_secrets),
     })
 
 
@@ -1709,10 +1721,48 @@ def tag_create(request):
 def totp_generate(request, pk):
     entry = get_object_or_404(_accessible_entries(request.user), pk=pk)
     import pyotp
+    from django.utils.html import escape
 
-    secret = request.POST.get('secret', '').strip()
+    secret = (request.POST.get('secret') or '').strip()
+    code = (request.POST.get('code') or '').strip()
+
+    error = None
+    totp = None
     if not secret:
-        secret = pyotp.random_base32()
+        error = _('La clave secreta es obligatoria.')
+    else:
+        try:
+            totp = pyotp.TOTP(secret)
+            totp.now()
+        except Exception:
+            totp = None
+            error = _('La clave secreta no es válida.')
+
+    if error is None and code:
+        try:
+            valid = totp.verify(code, valid_window=1)
+        except Exception:
+            valid = False
+        if not valid:
+            error = _('El código no es válido. Revisa la hora de tu dispositivo e inténtalo de nuevo.')
+
+    hx_request = request.headers.get('HX-Request')
+
+    if error is not None:
+        if hx_request:
+            section = render_to_string(
+                'passwords/includes/totp_section.html',
+                {'entry': entry, 'hide_modal': True},
+                request=request,
+            )
+            alert = (
+                '<div id="totpModalError" hx-swap-oob="true">'
+                '<div class="alert alert-danger py-2 mb-0" role="alert">'
+                '<i class="bi bi-exclamation-triangle-fill me-1"></i>%s</div></div>'
+            ) % escape(str(error))
+            return HttpResponse(alert + section)
+        messages.error(request, error)
+        return redirect('passwords:detail', pk=pk)
 
     entry.set_totp_secret(secret)
     entry.version += 1
@@ -1726,8 +1776,21 @@ def totp_generate(request, pk):
         changes_summary='2FA',
     )
 
-    if request.headers.get('HX-Request'):
-        return render(request, 'passwords/includes/totp_section.html', {'entry': entry})
+    if hx_request:
+        section = render_to_string(
+            'passwords/includes/totp_section.html',
+            {'entry': entry, 'hide_modal': True},
+            request=request,
+        )
+        resp = HttpResponse(section)
+        resp['HX-Trigger'] = json.dumps({
+            'totpSaved': True,
+            'showToast': {
+                'message': str(_('2FA configurado correctamente')),
+                'type': 'success',
+            },
+        })
+        return resp
 
     messages.success(request, _('2FA configurado correctamente'))
     return redirect('passwords:detail', pk=pk)

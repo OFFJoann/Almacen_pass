@@ -32,5 +32,45 @@
         var input = document.getElementById('id_password');
         input.type = input.type === 'password' ? 'text' : 'password';
     }
+    {% if entry %}
+    function submitEntryEdit(form) {
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        var csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
+            body: new FormData(form)
+        })
+        .then(function (r) { return r.json().catch(function () { return { status: 'error' }; }); })
+        .then(function (data) {
+            if (data.status === 'ok') {
+                ticoSuccess(data.message || 'Contraseña actualizada exitosamente', function () {
+                    window.location = "{% url 'passwords:vault' %}";
+                });
+            } else {
+                if (btn) btn.disabled = false;
+                if (data.html) {
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = data.html;
+                    var nf = tmp.querySelector('form');
+                    if (nf) { form.replaceWith(nf); bindEntryEditForm(nf); return; }
+                }
+                showToast('Revisa los campos del formulario', 'danger');
+            }
+        })
+        .catch(function () { if (btn) btn.disabled = false; showToast('Error de red', 'danger'); });
+    }
+    function bindEntryEditForm(form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            ticoConfirm('¿Guardar los cambios de esta contraseña?', null, 'btn-primary', function () { submitEntryEdit(form); });
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var f = document.querySelector('form[method="post"]');
+        if (f) bindEntryEditForm(f);
+    });
+    {% endif %}
 </script>
 {% endblock %}
